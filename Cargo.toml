@@ -1,0 +1,28 @@
+[package]
+name = "babel_engine"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name="babel_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+bevy_ecs = "0.18.1"
+bytemuck = { version = "1.25.0", features = ["derive"] }
+glam = "0.32.1"
+numpy = "0.28.0"
+pollster = "0.4.0"
+pyo3 = { version = "0.28.2", features = ["extension-module"] }
+rayon = "1.11.0"
+wgpu = "27.0.1"
+winit = "0.30"
+egui = "0.33"
+egui-wgpu = "0.33"
+egui-winit = "0.33"
+
+[profile.release]
+opt-level = 3          # Maximize CPU speed
+lto = "fat"            # Full Link-Time Optimization (Reduces binary size and increases speed)
+codegen-units = 1      # Slower compile times, but much faster runtime execution
+panic = "abort"        # Removes panic unwinding overhead
