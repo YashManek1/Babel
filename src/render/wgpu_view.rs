@@ -1,8 +1,13 @@
+use crate::render::camera::FreecamState;
 use crate::world::voxel::{ShapeType, Voxel};
 use glam::{Mat4, Vec3};
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
-use winit::{event_loop::EventLoop, window::Window};
+use winit::{
+    event::{DeviceEvent, ElementState, MouseButton, MouseScrollDelta},
+    event_loop::EventLoop,
+    window::Window,
+};
 
 // =============================================================================
 // LEARNING MECHANIC: The Command Pattern
@@ -55,25 +60,6 @@ impl Vertex {
             ],
         }
     }
-}
-
-// =============================================================================
-// LEARNING MECHANIC: The MVP Matrix (Model-View-Projection)
-// =============================================================================
-// To turn a 3D world coordinate into a 2D screen pixel, we multiply by 3 matrices:
-//
-//   Model:      Where is this specific object in the world? (we use identity = origin)
-//   View:       Where is the camera and where is it looking? (look_at_rh)
-//   Projection: How does 3D perspective map to the 2D screen? (perspective_rh)
-//
-// Combined as MVP = Projection × View × Model, applied to every vertex in the shader.
-// glam uses SIMD-accelerated matrix math. to_cols_array_2d() converts it to the
-// column-major format that WGSL/GLSL shaders expect.
-fn build_mvp_matrix(aspect_ratio: f32) -> [[f32; 4]; 4] {
-    let projection = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.1, 100.0);
-    let view = Mat4::look_at_rh(Vec3::new(8.0, 8.0, 12.0), Vec3::ZERO, Vec3::Y);
-    let mvp = projection * view;
-    mvp.to_cols_array_2d()
 }
 
 // =============================================================================
@@ -432,14 +418,16 @@ pub struct RenderContext {
     render_pipeline: wgpu::RenderPipeline,
     border_pipeline: wgpu::RenderPipeline,
     camera_bind_group: wgpu::BindGroup,
+    pub camera_buf: wgpu::Buffer,
     depth_view: wgpu::TextureView,
     pub egui_ctx: egui::Context,
     pub egui_state: egui_winit::State,
     pub egui_renderer: egui_wgpu::Renderer,
     last_cursor_px: Option<(f32, f32)>,
-    spawn_x: f32,
-    spawn_z: f32,
+    pub spawn_x: f32,
+    pub spawn_z: f32,
     sphere_r: f32,
+    pub camera: FreecamState,
 }
 
 impl RenderContext {
@@ -504,9 +492,11 @@ impl RenderContext {
                 label: None,
             });
 
-        let mvp = build_mvp_matrix(config.width as f32 / config.height as f32);
+        let camera = FreecamState::default();
+        let aspect = config.width as f32 / config.height as f32;
+        let mvp = camera.build_mvp(aspect);
         let camera_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("camera_buf"),
             contents: bytemuck::cast_slice(&[mvp]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
@@ -655,6 +645,7 @@ impl RenderContext {
             render_pipeline,
             border_pipeline,
             camera_bind_group,
+            camera_buf,
             depth_view,
             egui_ctx,
             egui_state,
@@ -663,32 +654,54 @@ impl RenderContext {
             spawn_x: 0.0,
             spawn_z: 0.0,
             sphere_r: 1.0,
+            camera,
         })
     }
 
     pub fn handle_window_event(&mut self, event: &winit::event::WindowEvent) {
-        // =======================================================================
-        // LEARNING MECHANIC: Mouse-to-World Ray Casting (Unprojection)
-        // =======================================================================
-        // The user clicks a 2D screen pixel. We want to know the 3D world position
-        // on the ground plane (y=0) that corresponds to that pixel.
-        //
-        // Steps:
-        // 1. Convert pixel to NDC (Normalized Device Coordinates: -1 to +1)
-        // 2. Multiply by inverse(MVP) to get a world-space ray direction
-        // 3. Intersect the ray with the y=0 plane: t = -ray_origin.y / ray_dir.y
-        // 4. world_point = ray_origin + t * ray_dir
-        //
-        // This is called "unprojection" — the inverse of the MVP transform.
         let _ = self.egui_state.on_window_event(&self.window, event);
 
+        // ── existing cursor tracking (keep as-is) ─────────────────────────────
         if let winit::event::WindowEvent::CursorMoved { position, .. } = event {
             self.last_cursor_px = Some((position.x as f32, position.y as f32));
         }
 
+        // ── NEW: right mouse button state → orbit guard ───────────────────────
+        // LEARNING: We only orbit on RMB so LMB stays free for egui interaction.
+        if let winit::event::WindowEvent::MouseInput { state, button, .. } = event {
+            if *button == MouseButton::Right {
+                self.camera.set_rmb(*state == ElementState::Pressed);
+            }
+        }
+
+        // ── NEW: scroll wheel → zoom ──────────────────────────────────────────
+        // LEARNING: Winit gives two scroll variants:
+        //   LineDelta: discrete "clicks" (most mice) — use y component
+        //   PixelDelta: trackpad smooth scroll — use y component in logical pixels
+        if let winit::event::WindowEvent::MouseWheel { delta, .. } = event {
+            if !self.egui_ctx.wants_pointer_input() {
+                let scroll = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => *y,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
+                };
+                self.camera.scroll(scroll);
+            }
+        }
+
+        // ── NEW: keyboard → WASD held-key state ──────────────────────────────
+        if let winit::event::WindowEvent::KeyboardInput {
+            event: key_event, ..
+        } = event
+        {
+            if !self.egui_ctx.wants_keyboard_input() {
+                self.camera.key_event(key_event);
+            }
+        }
+
+        // ── existing LMB ray-cast (keep as-is, but update MVP source) ─────────
         if let winit::event::WindowEvent::MouseInput {
-            state: winit::event::ElementState::Pressed,
-            button: winit::event::MouseButton::Left,
+            state: ElementState::Pressed,
+            button: MouseButton::Left,
             ..
         } = event
         {
@@ -705,31 +718,48 @@ impl RenderContext {
                     let ndc_x = (px / w) * 2.0 - 1.0;
                     let ndc_y = 1.0 - (py / h) * 2.0;
 
-                    let aspect = w / h;
-                    let mvp = Mat4::from_cols_array_2d(&build_mvp_matrix(aspect));
-                    // Inverse MVP: transform NDC point back to world space
+                    // CHANGE: use camera.build_mvp() instead of build_mvp_matrix()
+                    let mvp = Mat4::from_cols_array_2d(&self.camera.build_mvp(w / h));
                     let inv_mvp = mvp.inverse();
 
-                    // Near and far clip points in NDC (z=0 near, z=1 far in WGPU)
                     let near = inv_mvp.project_point3(Vec3::new(ndc_x, ndc_y, 0.0));
                     let far = inv_mvp.project_point3(Vec3::new(ndc_x, ndc_y, 1.0));
-
                     let dir = (far - near).normalize();
 
-                    // Intersect with y = 0 ground plane
                     if dir.y.abs() > 1e-5 {
                         let t = -near.y / dir.y;
                         let hit = near + dir * t;
-                        // Round to nearest integer grid cell
                         self.spawn_x = hit.x.round();
                         self.spawn_z = hit.z.round();
                     }
                 }
-            } // end !wants_pointer_input
+            }
+        }
+    }
+
+    pub fn handle_device_event(&mut self, event: &DeviceEvent) {
+        // LEARNING: DeviceEvent::MouseMotion { delta: (dx, dy) }
+        //   dx = pixels moved right (positive) or left (negative) since last event
+        //   dy = pixels moved DOWN  (positive) or up  (negative) since last event
+        //
+        // We pass (dx, dy) directly to camera.mouse_delta(), which applies
+        // sensitivity and clamps pitch internally.
+        if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
+            self.camera.mouse_delta(*dx, *dy);
         }
     }
 
     pub fn render_frame(&mut self, voxels: &[&Voxel]) -> Vec<UiCommand> {
+        // Recompute MVP and upload to the GPU uniform buffer
+        // NOTE: camera.update(dt) is called by lib.rs with real measured dt
+        // before this function — do NOT call it again here or pan speed doubles.
+        // LEARNING: queue.write_buffer is the fast path for small uniform updates.
+        // It schedules a CPU→GPU memcpy that completes before the next draw call.
+        let aspect = self.config.width as f32 / self.config.height as f32;
+        let mvp = self.camera.build_mvp(aspect);
+        self.queue
+            .write_buffer(&self.camera_buf, 0, bytemuck::cast_slice(&[mvp]));
+
         let mut commands = Vec::new();
 
         // ── egui UI pass ──────────────────────────────────────────────────────
@@ -773,7 +803,15 @@ impl RenderContext {
             .egui_ctx
             .tessellate(full_output.shapes, full_output.pixels_per_point);
 
-        let output = self.surface.get_current_texture().unwrap();
+        let output = match self.surface.get_current_texture() {
+            Ok(tex) => tex,
+            Err(wgpu::SurfaceError::Outdated) => {
+                // Surface needs reconfiguration (window was resized, etc.)
+                self.surface.configure(&self.device, &self.config);
+                self.surface.get_current_texture().unwrap()
+            }
+            Err(e) => panic!("Surface error: {:?}", e),
+        };
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());

@@ -1,9 +1,9 @@
 use bevy_ecs::prelude::*;
 use pyo3::prelude::*;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{DeviceEvent, DeviceId, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     platform::pump_events::EventLoopExtPumpEvents,
     window::WindowId,
@@ -24,6 +24,7 @@ pub struct BabelEngine {
     schedule: Schedule,
     event_loop: EventLoop<()>,
     renderer: Option<RenderContext>,
+    last_frame: Instant,
 }
 
 struct RenderEventPump<'a> {
@@ -35,14 +36,33 @@ impl ApplicationHandler for RenderEventPump<'_> {
 
     fn window_event(
         &mut self,
-        _event_loop: &ActiveEventLoop,
+        event_loop: &ActiveEventLoop,
         window_id: WindowId,
         event: WindowEvent,
     ) {
         if let Some(renderer) = self.renderer.as_mut() {
             if renderer.window.id() == window_id {
+                if matches!(event, WindowEvent::CloseRequested) {
+                    *self.renderer = None;
+                    event_loop.exit();
+                    return;
+                }
                 renderer.handle_window_event(&event);
             }
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
+        // LEARNING: device_event fires for ALL input devices, not just the window.
+        // This is where raw mouse delta lives — the delta that continues to
+        // report even after the cursor reaches the screen edge.
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.handle_device_event(&event);
         }
     }
 }
@@ -77,6 +97,7 @@ impl BabelEngine {
             schedule,
             event_loop,
             renderer,
+            last_frame: Instant::now(),
         }
     }
 
@@ -88,8 +109,13 @@ impl BabelEngine {
     }
 
     pub fn render(&mut self) {
+        let now = Instant::now();
+        let dt = self.last_frame.elapsed().as_secs_f32().min(0.1);
+        self.last_frame = now;
         let mut commands_to_execute = Vec::new();
-
+        if let Some(renderer) = &mut self.renderer {
+            renderer.camera.update(dt);
+        }
         {
             let mut query = self.ecs_world.query::<&Voxel>();
             let voxels: Vec<&Voxel> = query.iter(&self.ecs_world).collect();
