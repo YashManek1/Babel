@@ -18,6 +18,10 @@ use render::wgpu_view::{RenderContext, UiCommand};
 use world::spatial_grid::SpatialGrid;
 use world::voxel::{ShapeType, Voxel};
 
+// Maximum allowed stack height (grid Y). Capping prevents spawns far above
+// extremely tall towers which can destabilize the solver. Set to 16 for now.
+const MAX_STACK_HEIGHT: i32 = 16;
+
 #[pyclass(unsendable)]
 pub struct BabelEngine {
     ecs_world: World,
@@ -45,7 +49,7 @@ impl ApplicationHandler for RenderEventPump<'_> {
                 if matches!(event, WindowEvent::CloseRequested) {
                     *self.renderer = None;
                     event_loop.exit();
-                    return;
+                    std::process::exit(0);
                 }
                 renderer.handle_window_event(&event);
             }
@@ -125,7 +129,36 @@ impl BabelEngine {
         }
 
         for cmd in commands_to_execute {
-            let drop_height = 10.0;
+            // Compute a safe drop height for the spawn column so spawned objects
+            // don't intersect tall towers. We query the SpatialGrid for the
+            // current highest occupied grid Y at the spawn X/Z and place the
+            // new object several units above that. If the column is empty,
+            // fall back to the previous default height (10.0).
+            let drop_height = {
+                // round spawn coords to grid coordinates
+                let gx = (match &cmd {
+                    UiCommand::SpawnCube { x, .. }
+                    | UiCommand::SpawnWedge { x, .. }
+                    | UiCommand::SpawnSphere { x, .. } => *x,
+                })
+                .round() as i32;
+                let gz = (match &cmd {
+                    UiCommand::SpawnCube { z, .. }
+                    | UiCommand::SpawnWedge { z, .. }
+                    | UiCommand::SpawnSphere { z, .. } => *z,
+                })
+                .round() as i32;
+
+                let grid = self.ecs_world.get_resource::<SpatialGrid>().unwrap();
+                match grid.column_max_y(gx, gz) {
+                    Some(y) => {
+                        let capped = y.min(MAX_STACK_HEIGHT);
+                        capped as f32 + 5.0 // 5 units above highest block in column (capped)
+                    }
+                    None => 10.0,
+                }
+            };
+
             match cmd {
                 UiCommand::SpawnCube { x, z } => {
                     self.ecs_world

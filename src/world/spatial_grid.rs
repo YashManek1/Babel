@@ -44,6 +44,17 @@ impl SpatialGrid {
     }
 }
 
+impl SpatialGrid {
+    /// Returns the maximum Y grid coordinate for a given column (x,z), if any.
+    pub fn column_max_y(&self, x: i32, z: i32) -> Option<i32> {
+        self.map
+            .keys()
+            .filter(|k| k[0] == x && k[2] == z)
+            .map(|k| k[1])
+            .max()
+    }
+}
+
 pub fn update_spatial_grid_system(mut grid: ResMut<SpatialGrid>, query: Query<(Entity, &Voxel)>) {
     grid.map.clear();
     for (entity, voxel) in query.iter() {
