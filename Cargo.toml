@@ -21,8 +21,12 @@ egui = "0.33"
 egui-wgpu = "0.33"
 egui-winit = "0.33"
 
+[profile.dev]
+opt-level = 1        # some optimization so physics isn't crawling
+debug = true         # keeps debug symbols for error messages
+
 [profile.release]
-opt-level = 3          # Maximize CPU speed
-lto = "fat"            # Full Link-Time Optimization (Reduces binary size and increases speed)
-codegen-units = 1      # Slower compile times, but much faster runtime execution
-panic = "abort"        # Removes panic unwinding overhead
+opt-level = 3
+lto = "fat"          # only use this for final benchmarking / submission
+codegen-units = 1
+panic = "abort"
