@@ -32,28 +32,18 @@
 // occur during normal operation. Memory footprint is stable after the first
 // few frames, eliminating a major source of allocation pressure.
 //
-// LEARNING TOPIC: HashMap Capacity in Rust
-// -----------------------------------------
-// HashMap::with_capacity(n) allocates space for n items WITHOUT RESIZING
-// until n+1 is inserted. The table uses open addressing with a load factor
-// of ~87%, so actual bucket count = n / 0.87 ≈ 1.15n.
+// =============================================================================
 //
-// For a world with 1000 blocks: 1000 capacity → ~1150 buckets allocated.
-// Each bucket = 24 bytes (hash + key + value) → ~27KB total — trivial.
+// OPTIMIZATION: get_neighbors_into() — eliminates per-call Vec allocation
+// ------------------------------------------------------------------------
+// The original get_neighbors() returned Vec<...> allocated fresh every call.
+//   100 blocks × 10 solver iterations = 1,000 Vec allocs PER FRAME.
+//   Each alloc = malloc (~50ns) + free (~30ns) = ~80ns × 1000 = ~80μs/frame.
 //
-// CRITICAL INSIGHT: Vec::with_capacity inside the map values
-// -----------------------------------------------------------
-// Each grid cell stores a Vec<(Entity, ShapeType)>. Most cells contain 0 or 1
-// blocks. Pre-allocating these inner Vecs would waste memory. Instead, we rely
-// on the HashMap entry API which creates the Vec lazily (only when a block
-// occupies that cell). Vec default capacity is 0 (no heap allocation) until
-// the first push().
-//
-// A Vec push to an empty Vec allocates exactly 4 slots (Rust default growth).
-// For our voxel world, most cells have 1 block, so 4 slots wastes 3 × 8 bytes
-// = 24 bytes per occupied cell. For 1000 blocks, that's 24KB overhead — fine.
-// A future optimization: use SmallVec<[(Entity, ShapeType); 1]> for 0-alloc
-// single-block cells (relevant for Sprint 8's scale test with 1000+ blocks).
+// get_neighbors_into() takes a &mut Vec and clears+fills it in place.
+// The Vec lives in SolverBuffers and is reused across all calls.
+// After the first frame it already has capacity for ~32 neighbors and
+// never allocates again. Zero heap activity in the steady-state hot path.
 // =============================================================================
 
 use crate::world::voxel::{ShapeType, Voxel};
@@ -73,7 +63,6 @@ use std::collections::HashMap;
 //
 // LEARNING: If you spawn 5000 blocks, the grid will resize once past 2048.
 // For the Sprint 8 scale test (1000 blocks), 2048 is more than sufficient.
-// Adjust this constant as the project scales to Phase III (100+ agents).
 // =============================================================================
 const GRID_INITIAL_CAPACITY: usize = 2048;
 
@@ -121,7 +110,7 @@ impl SpatialGrid {
     // Wait — that seems like .round() is WRONG. But actually for our physics:
     // A block at y=0.5 is at the TOP of cell 0 or BOTTOM of cell 1. With .round(),
     // it maps to cell 1 (nearest integer). Its neighbor below (y=-0.5) maps to cell 0.
-    // Our get_neighbors() checks 27 cells (−1, 0, +1 in each axis), so both cells
+    // Our get_neighbors*() checks 27 cells (−1, 0, +1 in each axis), so both cells
     // are always checked regardless of which cell the block is in.
     //
     // The key requirement: blocks that are PHYSICALLY ADJACENT should map to
@@ -162,8 +151,21 @@ impl SpatialGrid {
     }
 
     // =========================================================================
-    // get_neighbors() — Return all entities in the 27-cell neighborhood
+    // get_neighbors_into() — Fill a reusable buffer with the 27-cell neighborhood
     // =========================================================================
+    //
+    // LEARNING TOPIC: Zero-Allocation Neighbor Query
+    // -----------------------------------------------
+    // This is the preferred method for the solver hot path.
+    //
+    // Instead of returning a new Vec (heap allocation), we accept a &mut Vec
+    // that already exists in SolverBuffers. We clear it and fill it in place.
+    //
+    // WHY THIS MATTERS:
+    //   The solver calls get_neighbors on every block every iteration:
+    //   100 blocks × 10 iterations = 1,000 calls per frame.
+    //   Old get_neighbors(): 1,000 malloc + 1,000 free = ~80μs/frame wasted.
+    //   New get_neighbors_into(): 1 allocation total (first call), zero after.
     //
     // LEARNING TOPIC: 27-Cell Neighborhood (3×3×3 kernel)
     // -----------------------------------------------------
@@ -177,37 +179,43 @@ impl SpatialGrid {
     // the query position in any direction. For unit cubes (radius = 0.5):
     //   Maximum collision range = 0.5 + 0.5 + rounding_error ≤ 1.5
     //   → Always found within the 27-cell neighborhood ✓
-    //
-    // For spheres with radius up to 1.5, we might miss some neighbors!
-    // Sprint 6 (Lidar Vision) will extend this to a configurable search radius.
-    //
-    // OPTIMIZATION NOTE: Returns Vec (heap allocated) per call.
-    // For the scale test (1000 blocks × 60Hz), that's 60,000 Vec allocations/sec.
-    // Sprint 8 improvement: pass a reusable buffer (like SolverBuffers pattern)
-    // to avoid per-call allocation. Prototype correctness first, optimize later.
-    pub fn get_neighbors(&self, position: Vec3) -> Vec<(Entity, ShapeType, [i32; 3])> {
-        // =======================================================================
-        // OPTIMIZATION: Pre-allocate the neighbors vec with a reasonable capacity.
-        // Average blocks per 27-cell neighborhood in a dense world: 5-15 blocks.
-        // Pre-allocating 16 slots avoids realloc for the common case.
-        // 16 = next power of two above 15 = minimum Vec doubling threshold.
-        // =======================================================================
-        let mut neighbors = Vec::with_capacity(16);
+    pub fn get_neighbors_into(&self, position: Vec3, buf: &mut Vec<(Entity, ShapeType, [i32; 3])>) {
+        // Clear the buffer but keep its allocated memory.
+        // LEARNING: Vec::clear() drops all elements but retains the heap allocation.
+        // This is the key: after the first call, buf already has capacity for ~32
+        // neighbors and this clear() is O(n) drops with zero realloc.
+        buf.clear();
+
         let center = Self::world_to_grid(position);
 
-        for x in -1..=1 {
-            for y in -1..=1 {
-                for z in -1..=1 {
+        for x in -1..=1i32 {
+            for y in -1..=1i32 {
+                for z in -1..=1i32 {
                     let check_pos = [center[0] + x, center[1] + y, center[2] + z];
                     if let Some(entities) = self.map.get(&check_pos) {
                         for (entity, shape) in entities {
-                            neighbors.push((*entity, shape.clone(), check_pos));
+                            buf.push((*entity, shape.clone(), check_pos));
                         }
                     }
                 }
             }
         }
-        neighbors
+    }
+
+    // =========================================================================
+    // get_neighbors() — Legacy: returns a new Vec (kept for compatibility)
+    // =========================================================================
+    //
+    // LEARNING: This allocates a new Vec every call — DO NOT use in hot paths.
+    // Kept here so any code outside the solver that calls it still compiles.
+    // The solver uses get_neighbors_into() instead.
+    //
+    // For 1000 blocks × 60Hz = 60,000 Vec allocations/sec if called per block.
+    // Sprint 8 improvement: remove all callers and delete this method.
+    pub fn get_neighbors(&self, position: Vec3) -> Vec<(Entity, ShapeType, [i32; 3])> {
+        let mut buf = Vec::with_capacity(16);
+        self.get_neighbors_into(position, &mut buf);
+        buf
     }
 
     // =========================================================================
@@ -226,7 +234,7 @@ impl SpatialGrid {
     //
     // LEARNING: We use .filter() + .map() + .max() — a functional chain.
     // Rust's iterator combinators are zero-overhead: the compiler fuses them into
-    // a single loop with no intermediate allocation (unlike Python list comprehensions).
+    // a single loop with no intermediate allocation.
     pub fn column_max_y(&self, x: i32, z: i32) -> Option<i32> {
         self.map
             .keys()
@@ -255,24 +263,17 @@ impl SpatialGrid {
     //   7 resize operations × O(N) copy each = O(N log N) total per frame!
     //
     // With clear_and_reserve(), it's O(N) total per frame (just inserts, no resizes).
-    // For 1000 blocks × 60 Hz: saves 6 × 60 × realloc overhead ≈ measurable win.
     pub fn clear_and_reserve(&mut self, expected_blocks: usize) {
         self.map.clear();
 
         // If the world has grown significantly beyond our initial capacity,
         // reserve additional space to prevent future resizes.
-        // LEARNING: reserve() is a hint — it ensures capacity >= current + additional.
-        // We use saturating_sub to avoid overflow if len() > expected_blocks.
         let current_capacity = self.map.capacity();
         if expected_blocks > current_capacity {
-            // Growing: reserve the difference (plus 25% headroom to avoid
-            // immediate re-resize when more blocks are added).
             let additional = expected_blocks.saturating_sub(current_capacity);
             self.map.reserve(additional + additional / 4);
         }
-        // Shrinking: we intentionally don't shrink_to_fit() because:
-        //   1. The next frame will likely re-expand back to the same size
-        //   2. Shrinking requires reallocation — the exact cost we're avoiding
+        // Intentionally do NOT shrink_to_fit() — the next frame will re-expand.
     }
 }
 
@@ -291,10 +292,6 @@ impl SpatialGrid {
 //      The solver uses this to find neighbors for the current step.
 //   2. AFTER update_velocities: grid is rebuilt from THIS frame's FINAL positions.
 //      Python queries and the render system see the correct, post-physics state.
-//
-// Running it twice is O(2N) = O(N) — acceptable. The alternative (incremental
-// updates) would be O(moved_blocks) but requires tracking which blocks moved,
-// adding complexity that's premature for Sprint 2's block counts.
 //
 // OPTIMIZATION APPLIED HERE:
 //   - count() pass before insert pass to get exact expected_blocks count

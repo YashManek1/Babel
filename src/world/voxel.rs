@@ -29,7 +29,7 @@ use glam::{Quat, Vec3};
 //   - Which collision algorithm to use (AABB, SAT+slope, sphere-AABB)
 //   - Which vertex data to send to the GPU for rendering
 //   - What physics mass to assign on creation
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ShapeType {
     Cube,
     Wedge,
@@ -126,6 +126,11 @@ pub struct Voxel {
     /// Number of contacts this frame — used to normalize contact_normal_accum
     /// into an average rather than a sum.
     pub contact_count: u32,
+
+    /// Sleep flag for broad-phase/integration skipping.
+    /// Sleeping blocks are treated as temporarily static until a contact
+    /// correction wakes them up.
+    pub is_sleeping: bool,
 }
 
 impl Voxel {
@@ -191,6 +196,7 @@ impl Voxel {
             angular_velocity: Vec3::ZERO,
             contact_normal_accum: Vec3::ZERO,
             contact_count: 0,
+            is_sleeping: false,
         }
     }
 
