@@ -67,6 +67,31 @@
 //   PyReadwriteArray1<f32> — a mutable reference to a numpy array, borrowed
 //   from Python and written to in-place by Rust.
 // =============================================================================
+//
+// OPTIMIZATION: HEADLESS FLAG (Sprint 2 — Window Throttling Fix)
+// --------------------------------------------------------------
+// PROBLEM IDENTIFIED (March 22):
+//   The zero-copy benchmark section called BabelEngine::new(), which always
+//   calls RenderContext::new() → creates a WGPU window via winit.
+//
+//   On Windows, an OS window that never receives pump_app_events() is treated
+//   as "Not Responding." Windows starts rate-limiting the process's CPU time
+//   as a resource-management measure. This bled into benchmark timing, making
+//   the zero-copy section show artificially low step rates.
+//
+//   Confirmed: the "not responding" window visible after benchmark output was
+//   exactly this — a WGPU window created by BabelEngine::new() inside the
+//   zero-copy test, never pumped, causing OS throttling.
+//
+// FIX:
+//   Add BabelEngine::new_headless() — same as new() but skips RenderContext
+//   entirely. renderer = None. No window is created. No OS throttling occurs.
+//   The EventLoop is still created (required by winit for pump_app_events)
+//   but without a Surface/Window attached it has zero overhead.
+//
+//   Use new_headless() for: benchmark tests, RL training, any headless workload.
+//   Use new() for: interactive debugging with the visual 3D window.
+// =============================================================================
 
 use bevy_ecs::prelude::*;
 use numpy::{PyArray1, PyArrayMethods, PyReadwriteArray1};
@@ -244,61 +269,86 @@ pub struct BabelEngine {
     benchmark_start: Instant,
 }
 
+// =============================================================================
+// LEARNING: Shared constructor logic extracted into a free function
+// =============================================================================
+//
+// Both new() and new_headless() need to build the ECS world and schedule.
+// We extract that shared logic here so it doesn't need to be duplicated.
+// This is the "Extract Method" refactor pattern — keep constructors DRY.
+fn build_ecs_and_schedule() -> (World, Schedule) {
+    let mut ecs_world = World::new();
+
+    // =======================================================================
+    // LEARNING: Bevy ECS Resources vs Components
+    // -------------------------------------------
+    // Resources are global singletons (one per World, no Entity owner).
+    // We pre-insert them here so systems can always assume they exist.
+    //
+    // If a system tries to access a Resource that wasn't inserted, Bevy
+    // panics immediately with a clear error — much better than a null pointer.
+    //
+    // SolverBuffers uses ResMut (mutable resource) — it's the reusable
+    // HashMap/HashSet pool that prevents per-frame heap allocations in the
+    // XPBD constraint solver.
+    // =======================================================================
+    ecs_world.insert_resource(SpatialGrid::default());
+    ecs_world.insert_resource(PhysicsSettings::default());
+    ecs_world.insert_resource(SolverBuffers::default());
+
+    // =======================================================================
+    // LEARNING: Bevy's System Scheduling and .chain()
+    // ------------------------------------------------
+    // .chain() enforces strict sequential ordering within the tuple.
+    // Without it, Bevy might parallelize systems that have data dependencies.
+    //
+    // Our pipeline has strict dependencies:
+    //   1. update_spatial_grid   ← must run FIRST (builds the grid from
+    //                              current positions for neighbor lookups)
+    //   2. integrate             ← writes predicted_position (reads velocity)
+    //   3. solve_constraints     ← reads spatial grid, writes predicted_pos
+    //   4. update_velocities     ← commits predicted_pos → position, derives v
+    //   5. update_spatial_grid   ← SECOND run: rebuild grid from FINAL positions
+    //                              (so render and Python queries see correct state)
+    //
+    // The second spatial grid update is crucial: without it, the grid would
+    // contain positions from BEFORE constraint resolution, causing the next
+    // frame's broad-phase to find false-positive overlaps.
+    // =======================================================================
+    let mut schedule = Schedule::default();
+    schedule.add_systems(
+        (
+            world::spatial_grid::update_spatial_grid_system,
+            physics::xpbd::integrate_system,
+            physics::xpbd::solve_constraints_system,
+            physics::xpbd::update_velocities_system,
+            world::spatial_grid::update_spatial_grid_system,
+        )
+            .chain(),
+    );
+
+    (ecs_world, schedule)
+}
+
 #[pymethods]
 impl BabelEngine {
+    // =========================================================================
+    // new() — Full engine with WGPU window (interactive mode)
+    // =========================================================================
+    //
+    // LEARNING: Use this constructor when you want the visual 3D window —
+    // for interactive block spawning, debugging physics, watching agents train.
+    //
+    // Do NOT use this for benchmarks or headless RL training. The WGPU window
+    // it creates will cause OS throttling if pump_os_events() isn't called
+    // regularly. Use new_headless() instead for any non-interactive use.
     #[new]
     pub fn new() -> Self {
-        let mut ecs_world = World::new();
-
-        // =======================================================================
-        // LEARNING: Bevy ECS Resources vs Components
-        // -------------------------------------------
-        // Resources are global singletons (one per World, no Entity owner).
-        // We pre-insert them here so systems can always assume they exist.
-        //
-        // If a system tries to access a Resource that wasn't inserted, Bevy
-        // panics immediately with a clear error — much better than a null pointer.
-        //
-        // SolverBuffers uses ResMut (mutable resource) — it's the reusable
-        // HashMap/HashSet pool that prevents per-frame heap allocations in the
-        // XPBD constraint solver.
-        // =======================================================================
-        ecs_world.insert_resource(SpatialGrid::default());
-        ecs_world.insert_resource(PhysicsSettings::default());
-        ecs_world.insert_resource(SolverBuffers::default());
-
-        // =======================================================================
-        // LEARNING: Bevy's System Scheduling and .chain()
-        // ------------------------------------------------
-        // .chain() enforces strict sequential ordering within the tuple.
-        // Without it, Bevy might parallelize systems that have data dependencies.
-        //
-        // Our pipeline has strict dependencies:
-        //   1. update_spatial_grid   ← must run FIRST (builds the grid from
-        //                              current positions for neighbor lookups)
-        //   2. integrate             ← writes predicted_position (reads velocity)
-        //   3. solve_constraints     ← reads spatial grid, writes predicted_pos
-        //   4. update_velocities     ← commits predicted_pos → position, derives v
-        //   5. update_spatial_grid   ← SECOND run: rebuild grid from FINAL positions
-        //                              (so render and Python queries see correct state)
-        //
-        // The second spatial grid update is crucial: without it, the grid would
-        // contain positions from BEFORE constraint resolution, causing the next
-        // frame's broad-phase to find false-positive overlaps.
-        // =======================================================================
-        let mut schedule = Schedule::default();
-        schedule.add_systems(
-            (
-                world::spatial_grid::update_spatial_grid_system,
-                physics::xpbd::integrate_system,
-                physics::xpbd::solve_constraints_system,
-                physics::xpbd::update_velocities_system,
-                world::spatial_grid::update_spatial_grid_system,
-            )
-                .chain(),
-        );
-
+        let (ecs_world, schedule) = build_ecs_and_schedule();
         let event_loop = EventLoop::new().unwrap();
+
+        // RenderContext::new() creates: winit Window + WGPU device + surface +
+        // shader compilation + egui init. Takes ~500ms-2s on first call.
         let renderer = RenderContext::new(&event_loop);
 
         Self {
@@ -306,6 +356,58 @@ impl BabelEngine {
             schedule,
             event_loop,
             renderer,
+            last_frame: Instant::now(),
+            step_count: 0,
+            benchmark_start: Instant::now(),
+        }
+    }
+
+    // =========================================================================
+    // new_headless() — Physics-only engine, NO window (benchmark / RL training)
+    // =========================================================================
+    //
+    // LEARNING TOPIC: Why the window causes throttling
+    // -------------------------------------------------
+    // On Windows (and macOS/Linux to a lesser extent), the OS tracks whether
+    // GUI windows are "responsive" by monitoring whether they process messages
+    // from the message queue. If a window doesn't process messages for >5 seconds,
+    // Windows marks it "Not Responding" and can start throttling its CPU time.
+    //
+    // In our benchmark:
+    //   BabelEngine::new()   → creates a WGPU window via winit
+    //   step_batch(N)        → runs physics in a tight loop, never pumps events
+    //   result printed       → window is still there, OS has been throttling us
+    //
+    // This is why the zero-copy benchmark section showed ~1354 steps/sec even
+    // after the release build fix — the window throttling was the last bottleneck.
+    //
+    // new_headless() sets renderer = None, which means:
+    //   - No winit Window is created
+    //   - No WGPU Surface/Device/Queue is allocated
+    //   - No shader compilation
+    //   - No OS message queue for the throttler to monitor
+    //   - pump_os_events() becomes a no-op (renderer is None)
+    //   - render() becomes a no-op (renderer is None)
+    //
+    // The EventLoop is still created because winit requires it for
+    // pump_app_events() to work at all, but without a Surface it has
+    // essentially zero overhead.
+    //
+    // EXPECTED IMPROVEMENT from this fix:
+    //   Before: zero-copy benchmark 1354 steps/sec (with window throttling)
+    //   After:  zero-copy benchmark 5000-8000+ steps/sec (no throttling)
+    #[staticmethod]
+    pub fn new_headless() -> Self {
+        let (ecs_world, schedule) = build_ecs_and_schedule();
+        let event_loop = EventLoop::new().unwrap();
+
+        // renderer = None — NO window created, NO WGPU device, NO OS throttling.
+        // This is the key difference from new(). Everything else is identical.
+        Self {
+            ecs_world,
+            schedule,
+            event_loop,
+            renderer: None, // ← THE FIX: no window, no throttling
             last_frame: Instant::now(),
             step_count: 0,
             benchmark_start: Instant::now(),
@@ -563,7 +665,7 @@ impl BabelEngine {
     }
 
     // =========================================================================
-    // clear_world() — remove all dynamic blocks (RL episode reset)
+    // clear_dynamic_blocks() — remove all dynamic blocks (RL episode reset)
     // =========================================================================
     //
     // LEARNING TOPIC: Bevy ECS Despawn Strategy
@@ -642,9 +744,15 @@ impl BabelEngine {
     // while the human observer can call render() every 256 steps to watch
     // at an effective "video" of the training at 30-60 FPS.
     //
-    // This is also why BabelEngine owns BOTH the physics World and the
-    // RenderContext: they share ECS data but are called on separate cadences.
+    // In headless mode (renderer = None), this is a complete no-op.
+    // No GPU work, no window update, no blocking — purely returns immediately.
     pub fn render(&mut self) {
+        // Headless mode: renderer is None, nothing to render.
+        // This is the fast-path for RL training — no GPU roundtrip.
+        if self.renderer.is_none() {
+            return;
+        }
+
         let now = Instant::now();
         let dt = self.last_frame.elapsed().as_secs_f32().min(0.1);
         self.last_frame = now;
@@ -719,10 +827,10 @@ impl BabelEngine {
     //
     // LEARNING: This must be called regularly to keep the OS window responsive.
     // Without it, the OS thinks the app is "frozen" and marks it "Not Responding."
-    // Even in headless training, if a window exists, it must receive events.
     //
-    // In fully headless mode (no window), this is a no-op since renderer = None.
-    // The EventLoop still processes events but they all go nowhere.
+    // In fully headless mode (renderer = None), this is a fast no-op.
+    // The EventLoop still technically runs but without a Surface it processes
+    // zero events and returns immediately — no OS throttling risk.
     pub fn pump_os_events(&mut self) {
         let mut app = RenderEventPump {
             renderer: &mut self.renderer,

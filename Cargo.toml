@@ -27,6 +27,6 @@ debug = true         # keeps debug symbols for error messages
 
 [profile.release]
 opt-level = 3
-lto = "fat"          # only use this for final benchmarking / submission
-codegen-units = 1
+lto = "thin"          # only use this for final benchmarking / submission
+codegen-units = 4
 panic = "abort"
