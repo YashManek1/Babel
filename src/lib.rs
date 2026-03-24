@@ -21,11 +21,13 @@
 //   BabelEngine (this file) — owns ECS World + Schedule + EventLoop
 //       │
 //       ├─► ECS Schedule (physics pipeline, runs N times per step_batch call)
-//       │       spatial_grid → integrate → solve_constraints → update_velocities → spatial_grid
+//       │       spatial_grid → integrate → solve_constraints →
+//       │       register_new_bonds → solve_mortar → break_bonds →
+//       │       update_velocities → spatial_grid
 //       │
 //       ├─► RenderContext (WGPU window, only updated when render() is called)
 //       │
-//       └─► SpatialGrid, PhysicsSettings, SolverBuffers (Bevy ECS Resources)
+//       └─► SpatialGrid, PhysicsSettings, SolverBuffers, MortarBonds (Resources)
 //
 // =============================================================================
 //
@@ -116,16 +118,20 @@ mod world;
 // =============================================================================
 mod bridge;
 
+use physics::mortar::{
+    MortarBonds, break_overloaded_bonds_system, register_new_bonds_system,
+    solve_mortar_constraints_system, try_register_bonds,
+};
 use physics::xpbd::{PhysicsSettings, SolverBuffers};
 use render::wgpu_view::{RenderContext, UiCommand};
 use world::spatial_grid::SpatialGrid;
-use world::voxel::{ShapeType, Voxel};
+use world::voxel::{MaterialType, ShapeType, Voxel};
 
 // =============================================================================
 // OPTIMIZATION CONSTANT: Maximum Stack Height Cap
 // ------------------------------------------------
-// When spawning blocks from the UI, we read the SpatialGrid to find the highest
-// existing block in that column and drop the new block 5 units above it.
+// When spawning blocks from the UI or Python, we read the SpatialGrid to find
+// the highest existing block in that column and drop the new block 5 units above.
 // Without a cap, if the grid somehow contains corrupt data at very high Y values,
 // the engine would spawn blocks at y=1000+ which immediately explodes the solver.
 //
@@ -134,6 +140,25 @@ use world::voxel::{ShapeType, Voxel};
 // Bucket Brigade (Phase IV).
 // =============================================================================
 const MAX_STACK_HEIGHT: i32 = 16;
+
+fn material_from_id(material_id: u8) -> MaterialType {
+    match material_id {
+        0 => MaterialType::Wood,
+        1 => MaterialType::Steel,
+        2 => MaterialType::Stone,
+        _ => MaterialType::Wood,
+    }
+}
+
+fn safe_spawn_height_for_grid(grid: &SpatialGrid, gx: i32, gz: i32) -> f32 {
+    match grid.column_max_y(gx, gz) {
+        Some(y) => {
+            let capped = y.min(MAX_STACK_HEIGHT);
+            capped as f32 + 5.0
+        }
+        None => 5.0,
+    }
+}
 
 // =============================================================================
 // OPTIMIZATION CONSTANT: Observation Vector Layout
@@ -295,6 +320,7 @@ fn build_ecs_and_schedule() -> (World, Schedule) {
     ecs_world.insert_resource(SpatialGrid::default());
     ecs_world.insert_resource(PhysicsSettings::default());
     ecs_world.insert_resource(SolverBuffers::default());
+    ecs_world.insert_resource(MortarBonds::default()); // SPRINT 3: bond registry
 
     // =======================================================================
     // LEARNING: Bevy's System Scheduling and .chain()
@@ -302,18 +328,24 @@ fn build_ecs_and_schedule() -> (World, Schedule) {
     // .chain() enforces strict sequential ordering within the tuple.
     // Without it, Bevy might parallelize systems that have data dependencies.
     //
-    // Our pipeline has strict dependencies:
-    //   1. update_spatial_grid   ← must run FIRST (builds the grid from
-    //                              current positions for neighbor lookups)
-    //   2. integrate             ← writes predicted_position (reads velocity)
-    //   3. solve_constraints     ← reads spatial grid, writes predicted_pos
-    //   4. update_velocities     ← commits predicted_pos → position, derives v
-    //   5. update_spatial_grid   ← SECOND run: rebuild grid from FINAL positions
-    //                              (so render and Python queries see correct state)
+    // SPRINT 3 SCHEDULE ORDER (updated):
+    //   1. update_spatial_grid          ← pre-step grid from committed positions
+    //   2. integrate                    ← apply gravity, compute predicted_position
+    //   3. solve_constraints            ← push blocks out of overlaps (XPBD)
+    //   4. register_new_bonds           ← create missing bonds for new face-neighbors
+    //   5. solve_mortar_constraints     ← pull bonded blocks back together ← SPRINT 3
+    //   6. break_overloaded_bonds       ← snap bonds that exceed breaking force ← SPRINT 3
+    //   7. update_velocities            ← commit positions, derive velocity, sleep
+    //   8. update_spatial_grid          ← post-step grid for spawning/UI/Python queries
     //
-    // The second spatial grid update is crucial: without it, the grid would
-    // contain positions from BEFORE constraint resolution, causing the next
-    // frame's broad-phase to find false-positive overlaps.
+    // WHY THIS ORDER:
+    //   Mortar runs AFTER the collision solver so blocks are already out of each
+    //   other's volume before we pull them together. This prevents the mortar
+    //   correction from pushing blocks back INTO a collision.
+    //
+    //   Break runs AFTER mortar so we can compute tension from the just-solved
+    //   stretch distance. Running break before mortar would snap bonds at their
+    //   pre-correction tension, which is artificially high (not yet pulled back).
     // =======================================================================
     let mut schedule = Schedule::default();
     schedule.add_systems(
@@ -321,12 +353,94 @@ fn build_ecs_and_schedule() -> (World, Schedule) {
             world::spatial_grid::update_spatial_grid_system,
             physics::xpbd::integrate_system,
             physics::xpbd::solve_constraints_system,
+            register_new_bonds_system,
+            solve_mortar_constraints_system, // SPRINT 3
+            break_overloaded_bonds_system,   // SPRINT 3
             physics::xpbd::update_velocities_system,
+            world::spatial_grid::update_spatial_grid_system,
         )
             .chain(),
     );
 
     (ecs_world, schedule)
+}
+
+// =============================================================================
+// INTERNAL HELPER: spawn a voxel and immediately register mortar bonds
+// =============================================================================
+//
+// LEARNING: We extract spawn + bond-registration into one helper so both
+// the UI path (render()) and the Python API (spawn_block, spawn_block_with_material)
+// go through identical logic. No path forgets to register bonds.
+//
+// The spatial grid must be UP TO DATE before calling this, otherwise
+// try_register_bonds() won't find neighbors. The schedule now rebuilds the
+// grid both before and after each physics step, so UI and Python spawns both
+// see current committed positions.
+//
+// SPRINT 3 NOTE: The benchmark previously bypassed this function and called
+// ecs_world.spawn(Voxel::new_with_material(...)) directly, which meant zero
+// bonds were ever registered and the mortar systems iterated over empty data.
+// All spawn paths now go through this function for honest benchmark numbers.
+fn spawn_voxel_and_register(
+    ecs_world: &mut World,
+    x: f32,
+    y: f32,
+    z: f32,
+    shape: ShapeType,
+    material: MaterialType,
+    is_static: bool,
+) -> Entity {
+    let voxel = Voxel::new_with_material(x, y, z, shape, material, is_static);
+    let entity = ecs_world.spawn(voxel).id();
+
+    // Immediately check 6 face-neighbors and register mortar bonds.
+    // We need to read: the voxel we just spawned, the spatial grid, all voxels,
+    // and write to: MortarBonds. Bevy's borrow checker requires careful ordering.
+    //
+    // Strategy: take the resources out, do the work, put them back.
+    // This is the standard "non-conflicting mutable access" pattern in Bevy.
+    let mut grid = ecs_world.remove_resource::<SpatialGrid>().unwrap();
+    let mut bonds = ecs_world.remove_resource::<MortarBonds>().unwrap();
+
+    // Get the spawned voxel's data for bond registration.
+    // SAFETY: We just spawned this entity, it definitely exists.
+    let new_voxel_ref = ecs_world.get::<Voxel>(entity).unwrap();
+
+    // try_register_bonds checks the neighbor's adhesion too, so we pass it
+    // even if the new block itself has 0.0 adhesion (e.g., Stone). The function
+    // handles that case by checking both sides before creating a bond.
+    try_register_bonds(entity, new_voxel_ref, &grid, ecs_world, &mut bonds);
+
+    // Keep grid immediately consistent so back-to-back spawns in the same frame
+    // (or benchmark spawn loops) can discover freshly spawned neighbors.
+    grid.insert(new_voxel_ref.position, entity, new_voxel_ref.shape);
+
+    ecs_world.insert_resource(grid);
+    ecs_world.insert_resource(bonds);
+
+    entity
+}
+
+fn spawn_sphere_and_register(
+    ecs_world: &mut World,
+    x: f32,
+    y: f32,
+    z: f32,
+    radius: f32,
+    material: MaterialType,
+    is_static: bool,
+) -> Entity {
+    let voxel = Voxel::new_sphere_with_material(x, y, z, radius, material, is_static);
+    let entity = ecs_world.spawn(voxel).id();
+
+    let mut grid = ecs_world.remove_resource::<SpatialGrid>().unwrap();
+    if let Some(new_voxel_ref) = ecs_world.get::<Voxel>(entity) {
+        grid.insert(new_voxel_ref.position, entity, new_voxel_ref.shape);
+    }
+    ecs_world.insert_resource(grid);
+
+    entity
 }
 
 #[pymethods]
@@ -377,9 +491,6 @@ impl BabelEngine {
     //   step_batch(N)        → runs physics in a tight loop, never pumps events
     //   result printed       → window is still there, OS has been throttling us
     //
-    // This is why the zero-copy benchmark section showed ~1354 steps/sec even
-    // after the release build fix — the window throttling was the last bottleneck.
-    //
     // new_headless() sets renderer = None, which means:
     //   - No winit Window is created
     //   - No WGPU Surface/Device/Queue is allocated
@@ -387,26 +498,17 @@ impl BabelEngine {
     //   - No OS message queue for the throttler to monitor
     //   - pump_os_events() becomes a no-op (renderer is None)
     //   - render() becomes a no-op (renderer is None)
-    //
-    // The EventLoop is still created because winit requires it for
-    // pump_app_events() to work at all, but without a Surface it has
-    // essentially zero overhead.
-    //
-    // EXPECTED IMPROVEMENT from this fix:
-    //   Before: zero-copy benchmark 1354 steps/sec (with window throttling)
-    //   After:  zero-copy benchmark 5000-8000+ steps/sec (no throttling)
     #[staticmethod]
     pub fn new_headless() -> Self {
         let (ecs_world, schedule) = build_ecs_and_schedule();
         let event_loop = EventLoop::new().unwrap();
 
         // renderer = None — NO window created, NO WGPU device, NO OS throttling.
-        // This is the key difference from new(). Everything else is identical.
         Self {
             ecs_world,
             schedule,
             event_loop,
-            renderer: None, // ← THE FIX: no window, no throttling
+            renderer: None,
             last_frame: Instant::now(),
             step_count: 0,
             benchmark_start: Instant::now(),
@@ -443,34 +545,14 @@ impl BabelEngine {
     //   - Rust function call + return: ~100ns
     //   Total: ~1 μs per call
     //
-    // At 2000 steps/sec target, if we call step() once per Python iteration:
-    //   Overhead = 2000 × 1μs = 2ms/sec = 0.2% overhead (acceptable)
-    //
-    // But our goal is to hit 2000+ steps/sec. The ACTUAL physics is ~100μs
-    // per step. So with step():
-    //   Max speed = 1 / (100μs + 1μs overhead) = ~9900 steps/sec
-    //   (Sounds fine, but Python's sleep/loop overhead adds another 10-50μs)
-    //   Realistic: ~2000-5000 steps/sec with step() from a tight Python loop
-    //
     // With step_batch(256) from Python, Rust runs 256 steps with ZERO Python
     // interruptions:
     //   Rust loop = 256 × 100μs = 25.6ms of pure Rust
     //   PyO3 overhead = 1μs (paid ONCE per batch, not per step)
     //   Max speed = 256 / (25.6ms + 0.001ms) ≈ 10,000+ steps/sec
     //
-    // This is the core insight: Python should be the DIRECTOR (train/evaluate),
-    // not the EXECUTOR (inner physics loop). Let Rust execute the inner loop.
-    //
     // Returns (steps_completed, block_count) so Python can monitor training.
     pub fn step_batch(&mut self, n: usize) -> PyResult<(usize, usize)> {
-        // Run the full physics schedule N times with no Python intervention.
-        // The CPU cache stays hot: all ECS component data accessed in iteration 1
-        // is still in L2/L3 cache for iteration 2 (same memory addresses).
-        //
-        // LEARNING: This is cache locality in practice. The Voxel components are
-        // stored in contiguous memory by Bevy's archetype system. Running the
-        // schedule N times without any intervening Python allocation keeps that
-        // data resident in CPU cache, giving near-linear speedup with batch size.
         for _ in 0..n {
             self.schedule.run(&mut self.ecs_world);
         }
@@ -491,7 +573,6 @@ impl BabelEngine {
     //   1. Rust allocates Vec<f32>           (heap allocation #1)
     //   2. PyO3 converts Vec → Python list   (allocation #2 + copy #1)
     //   3. Python converts list → np.array   (allocation #3 + copy #2)
-    //   4. PyTorch converts array → tensor   (possibly allocation #4 + copy #3)
     //
     // ZERO-COPY approach:
     //   Python allocates np.zeros(N, dtype=np.float32) ONCE before training.
@@ -500,30 +581,11 @@ impl BabelEngine {
     //   a tensor that SHARES the same physical memory.
     //
     //   Total copies: ZERO. Total allocations per step: ZERO.
-    //
-    // USAGE FROM PYTHON:
-    //   obs = np.zeros(engine.max_observation_size(), dtype=np.float32)
-    //   n_blocks = engine.get_observation_into(obs)
-    //   tensor = torch.from_numpy(obs[:n_blocks * 12])  # zero-copy view!
-    //
-    // LEARNING: PyReadwriteArray1<f32> is PyO3's way of borrowing a mutable
-    // reference to a numpy array's underlying data buffer. The 'py lifetime
-    // ensures Python's GIL is held for the duration of the write, preventing
-    // another Python thread from resizing the array while Rust is writing into it.
-    //
-    // Returns: number of DYNAMIC blocks written (static blocks are skipped —
-    // their positions never change so no RL agent needs to observe them).
     pub fn get_observation_into<'py>(
         &mut self,
         py: Python<'py>,
         obs: &Bound<'py, PyArray1<f32>>,
     ) -> PyResult<usize> {
-        // Borrow the numpy array as a writable Rust slice.
-        // This is a zero-cost borrow — no data is copied.
-        // PyO3 validates that the array is:
-        //   - contiguous in memory (C-order, not Fortran-order)
-        //   - dtype == float32 (matches our Vertex/physics data)
-        //   - not currently borrowed by another Rust function
         let mut rw: PyReadwriteArray1<f32> = obs.readwrite();
         let slice: &mut [f32] = rw.as_slice_mut()?;
 
@@ -532,17 +594,10 @@ impl BabelEngine {
         let mut block_count = 0usize;
 
         for voxel in query.iter(&self.ecs_world) {
-            // Skip static objects — they never move, neural network doesn't
-            // need to observe them (their positions are architectural constants).
             if voxel.inv_mass == 0.0 {
                 continue;
             }
 
-            // Bounds check: don't overflow the pre-allocated array.
-            // LEARNING: In a well-designed training loop, Python allocates
-            // obs = np.zeros(max_blocks * STRIDE) before the episode starts.
-            // If the world has more blocks than max_blocks, we silently truncate.
-            // This is intentional — the RL agent has a fixed input size.
             let end = write_idx + OBSERVATION_STRIDE;
             if end > slice.len() {
                 break;
@@ -576,10 +631,7 @@ impl BabelEngine {
             block_count += 1;
         }
 
-        // Suppress unused variable warning for 'py — it's needed to prove
-        // the GIL is held during the write (PyO3 lifetime-based safety).
         let _ = py;
-
         Ok(block_count)
     }
 
@@ -606,11 +658,6 @@ impl BabelEngine {
     //   - GIL acquire/release
     //   - Any Python code between calls
     //
-    // Measuring from Rust gives the TRUE physics throughput, independent of
-    // Python overhead. This matches the project's performance target:
-    //   "The engine must run at >2000 steps per second (headless)"
-    //   — from the Criteria & Requirements section.
-    //
     // Returns: (total_steps, elapsed_seconds, steps_per_second)
     pub fn get_benchmark_stats(&self) -> PyResult<(u64, f64, f64)> {
         let elapsed = self.benchmark_start.elapsed().as_secs_f64();
@@ -635,16 +682,42 @@ impl BabelEngine {
     }
 
     // =========================================================================
-    // spawn_block() — programmatic block spawning from Python (for RL reset)
+    // SPRINT 3: get_safe_spawn_height() — column-aware spawn height for Python
     // =========================================================================
     //
-    // LEARNING: In RL training, episodes start by calling env.reset().
-    // Reset needs to spawn blocks into specific positions (the "blueprint").
-    // This method allows Python to spawn blocks at exact positions without
-    // going through the UI command queue.
+    // SPRINT 3 BUG FIX — Hardcoded Spawn Height:
+    // -------------------------------------------
+    // babel_gym_env.py previously had:
+    //   spawn_y = 10.0  # TODO: query engine...
     //
-    // shape_id: 0=Cube, 1=Wedge, 2=Sphere
-    // is_static: true = immovable (foundation), false = dynamic (interactive)
+    // This caused blocks to spawn INSIDE the tower once it exceeded Y=10.
+    // The XPBD solver would detect a massive penetration depth and launch blocks
+    // at extreme velocities, corrupting the RL gradient and terminating episodes.
+    //
+    // FIX: Expose the column_max_y lookup from the spatial grid to Python.
+    // Python calls this before each spawn to get a safe drop height.
+    //
+    // WHY SPATIAL GRID, NOT QUERY:
+    //   The spatial grid already maps (x,z) → max occupied y in O(N) via
+    //   column_max_y(). We don't need to query all voxels and filter by column.
+    //   This is the same lookup the UI's render() path has always used —
+    //   now exposed to Python as a proper API.
+    //
+    // Returns: safe Y coordinate to spawn at (column top + 5 units clearance)
+    // The +5 gives enough fall height to let the block settle into position
+    // without spawning too far above (which wastes physics time falling).
+    pub fn get_safe_spawn_height(&self, world_x: f32, world_z: f32) -> PyResult<f32> {
+        let gx = world_x.round() as i32;
+        let gz = world_z.round() as i32;
+
+        let grid = self.ecs_world.get_resource::<SpatialGrid>().unwrap();
+        let height = safe_spawn_height_for_grid(grid, gx, gz);
+        Ok(height)
+    }
+
+    // =========================================================================
+    // spawn_block() — Original API, defaults to Wood (backward compatible)
+    // =========================================================================
     pub fn spawn_block(
         &mut self,
         x: f32,
@@ -657,45 +730,104 @@ impl BabelEngine {
             0 => ShapeType::Cube,
             1 => ShapeType::Wedge,
             2 => ShapeType::Sphere,
-            _ => ShapeType::Cube, // Default to cube for unknown IDs
+            _ => ShapeType::Cube,
         };
-        self.ecs_world.spawn(Voxel::new(x, y, z, shape, is_static));
+        // Default to Wood — same inv_mass as old behavior (inv_mass = 1.0)
+        spawn_voxel_and_register(
+            &mut self.ecs_world,
+            x,
+            y,
+            z,
+            shape,
+            MaterialType::Wood,
+            is_static,
+        );
         Ok(())
     }
 
     // =========================================================================
-    // clear_dynamic_blocks() — remove all dynamic blocks (RL episode reset)
+    // SPRINT 3: spawn_block_with_material() — Material-aware spawn
     // =========================================================================
     //
-    // LEARNING TOPIC: Bevy ECS Despawn Strategy
-    // ------------------------------------------
-    // In RL training, each episode starts with a fresh world state.
-    // We have two options:
+    // material_id:
+    //   0 = Wood  (light, medium adhesion)
+    //   1 = Steel (heavy, high adhesion)
+    //   2 = Stone (medium weight, no adhesion, high friction)
+    pub fn spawn_block_with_material(
+        &mut self,
+        x: f32,
+        y: f32,
+        z: f32,
+        shape_id: u8,
+        material_id: u8,
+        is_static: bool,
+    ) -> PyResult<()> {
+        let shape = match shape_id {
+            0 => ShapeType::Cube,
+            1 => ShapeType::Wedge,
+            2 => ShapeType::Sphere,
+            _ => ShapeType::Cube,
+        };
+        let material = material_from_id(material_id);
+        spawn_voxel_and_register(&mut self.ecs_world, x, y, z, shape, material, is_static);
+        Ok(())
+    }
+
+    // =========================================================================
+    // SPRINT 3+: spawn_sphere_with_material() — Material-aware sphere spawn
+    // =========================================================================
     //
-    // Option A: Create a new World() each reset.
-    //   → Clean state guaranteed
-    //   → But: re-inserting all Resources, re-building all schedules
-    //   → Cost: ~1-5ms per reset (acceptable for >1 second episodes)
+    // Spheres inherit material-dependent mass/friction/restitution, but the
+    // mortar system only creates bonds for face-neighbor voxel blocks.
+    pub fn spawn_sphere_with_material(
+        &mut self,
+        x: f32,
+        y: f32,
+        z: f32,
+        radius: f32,
+        material_id: u8,
+        is_static: bool,
+    ) -> PyResult<()> {
+        let material = material_from_id(material_id);
+        spawn_sphere_and_register(&mut self.ecs_world, x, y, z, radius, material, is_static);
+        Ok(())
+    }
+
+    // =========================================================================
+    // SPRINT 3: bond_count() — How many mortar bonds currently exist
+    // =========================================================================
     //
-    // Option B: Despawn only dynamic entities, keep the World alive.
-    //   → Resources (SpatialGrid, SolverBuffers) are already allocated
-    //   → Their internal HashMaps retain their allocated memory (no realloc)
-    //   → Cost: O(N) entity despawn, ~10-100μs for 1000 blocks
-    //   → BETTER for fast episode cycling (e.g., 10-second episodes)
-    //
-    // We implement Option B. Static entities (inv_mass == 0.0) are kept
-    // because they represent the environment structure (floors, walls).
-    // Dynamic entities (the blocks being stacked) are cleared for reset.
+    // Useful for:
+    //   - Debugging: watch bonds form and break in the terminal
+    //   - Python reward shaping: reward agent for building connected structures
+    //   - Stress testing: confirm bonds don't accumulate endlessly
+    pub fn bond_count(&self) -> PyResult<usize> {
+        let bonds = self.ecs_world.get_resource::<MortarBonds>().unwrap();
+        Ok(bonds.bonds.len())
+    }
+
+    // =========================================================================
+    // clear_dynamic_blocks() — SPRINT 3: also clears all mortar bonds
+    // =========================================================================
     pub fn clear_dynamic_blocks(&mut self) -> PyResult<usize> {
-        // Collect entities to despawn (can't despawn while iterating)
         let mut query = self.ecs_world.query::<(Entity, &Voxel)>();
         let to_despawn: Vec<Entity> = query
             .iter(&self.ecs_world)
-            .filter(|(_, v)| v.inv_mass > 0.0) // Only dynamic blocks
+            .filter(|(_, v)| v.inv_mass > 0.0)
             .map(|(e, _)| e)
             .collect();
 
         let count = to_despawn.len();
+
+        // SPRINT 3: Remove bonds before despawning entities
+        // (prevents dangling entity references in MortarBonds)
+        {
+            let mut bonds = self.ecs_world.get_resource_mut::<MortarBonds>().unwrap();
+            for &entity in &to_despawn {
+                bonds.remove_bonds_for(entity);
+            }
+        }
+
         for entity in to_despawn {
             // LEARNING: despawn() removes the entity AND all its components.
             // Bevy's archetype system immediately reclaims the memory slot,
@@ -737,17 +869,9 @@ impl BabelEngine {
     //   Training mode: step_batch(N) as fast as possible, never render()
     //   Debug mode:    step_batch(1) then render() at 60 Hz
     //
-    // The render() call is expensive (~5-15ms for GPU submit + vsync wait).
-    // The step_batch() call is fast (~1-25ms for 256 physics steps).
-    // By separating them, the RL trainer can run at 10,000+ steps/sec
-    // while the human observer can call render() every 256 steps to watch
-    // at an effective "video" of the training at 30-60 FPS.
-    //
     // In headless mode (renderer = None), this is a complete no-op.
     // No GPU work, no window update, no blocking — purely returns immediately.
     pub fn render(&mut self) {
-        // Headless mode: renderer is None, nothing to render.
-        // This is the fast-path for RL training — no GPU roundtrip.
         if self.renderer.is_none() {
             return;
         }
@@ -768,17 +892,6 @@ impl BabelEngine {
         }
 
         for cmd in commands_to_execute {
-            // =================================================================
-            // OPTIMIZATION: Column-height lookup before spawning
-            // -------------------------------------------------
-            // We read the SpatialGrid (already built by the last physics step)
-            // to find the highest existing block at the spawn X/Z column.
-            // This prevents new blocks from spawning INSIDE existing towers.
-            //
-            // The cap at MAX_STACK_HEIGHT prevents runaway heights from a bad
-            // physics state (e.g., a block launched upward by solver instability
-            // registering as the "highest" block in its column).
-            // =================================================================
             let drop_height = {
                 let gx = (match &cmd {
                     UiCommand::SpawnCube { x, .. }
@@ -794,27 +907,50 @@ impl BabelEngine {
                 .round() as i32;
 
                 let grid = self.ecs_world.get_resource::<SpatialGrid>().unwrap();
-                match grid.column_max_y(gx, gz) {
-                    Some(y) => {
-                        let capped = y.min(MAX_STACK_HEIGHT);
-                        capped as f32 + 5.0
-                    }
-                    None => 10.0,
-                }
+                safe_spawn_height_for_grid(grid, gx, gz)
             };
 
             match cmd {
-                UiCommand::SpawnCube { x, z } => {
-                    self.ecs_world
-                        .spawn(Voxel::new(x, drop_height, z, ShapeType::Cube, false));
+                UiCommand::SpawnCube { x, z, material_id } => {
+                    let material = material_from_id(material_id);
+                    spawn_voxel_and_register(
+                        &mut self.ecs_world,
+                        x,
+                        drop_height,
+                        z,
+                        ShapeType::Cube,
+                        material,
+                        false,
+                    );
                 }
-                UiCommand::SpawnWedge { x, z } => {
-                    self.ecs_world
-                        .spawn(Voxel::new(x, drop_height, z, ShapeType::Wedge, false));
+                UiCommand::SpawnWedge { x, z, material_id } => {
+                    let material = material_from_id(material_id);
+                    spawn_voxel_and_register(
+                        &mut self.ecs_world,
+                        x,
+                        drop_height,
+                        z,
+                        ShapeType::Wedge,
+                        material,
+                        false,
+                    );
                 }
-                UiCommand::SpawnSphere { x, z, radius } => {
-                    self.ecs_world
-                        .spawn(Voxel::new_sphere(x, drop_height, z, radius, false));
+                UiCommand::SpawnSphere {
+                    x,
+                    z,
+                    radius,
+                    material_id,
+                } => {
+                    let material = material_from_id(material_id);
+                    spawn_sphere_and_register(
+                        &mut self.ecs_world,
+                        x,
+                        drop_height,
+                        z,
+                        radius,
+                        material,
+                        false,
+                    );
                 }
             }
         }
@@ -828,8 +964,6 @@ impl BabelEngine {
     // Without it, the OS thinks the app is "frozen" and marks it "Not Responding."
     //
     // In fully headless mode (renderer = None), this is a fast no-op.
-    // The EventLoop still technically runs but without a Surface it processes
-    // zero events and returns immediately — no OS throttling risk.
     pub fn pump_os_events(&mut self) {
         let mut app = RenderEventPump {
             renderer: &mut self.renderer,
@@ -878,18 +1012,27 @@ impl BabelEngine {
 //   import babel_engine
 //   result = babel_engine.run_headless_benchmark(n_blocks=100, n_steps=10000)
 //
-// This benchmark is the Sprint 2 "Audit" tool:
-//   - Spawns n_blocks blocks in a tower formation
-//   - Runs n_steps physics steps with NO rendering
+// This benchmark is the Sprint 3 "Audit" tool:
+//   - Spawns n_blocks blocks with mixed materials via spawn_voxel_and_register
+//   - Runs n_steps physics steps including the full mortar pipeline
 //   - Reports: steps/sec, memory stable (no crash = no leak over 1M steps)
-//   - Target: >2000 steps/sec headless
+//   - Target: >2000 steps/sec headless (mortar adds O(bonds) overhead)
 //
-// MEMORY LEAK DETECTION STRATEGY:
-//   If step_batch() had a memory leak (e.g., forgot to clear a Vec inside
-//   SolverBuffers), repeated calls would grow RSS memory monotonically.
-//   The benchmark runs long enough to trigger OS memory pressure if leaking.
-//   A stable step rate (not slowing down over time) implies stable memory.
-//   For precise leak detection, run under `valgrind` or `heaptrack` in release.
+// SPRINT 3 BUG FIX — Honest Benchmark:
+// -------------------------------------
+// The old benchmark spawned blocks with ecs_world.spawn(Voxel::new_with_material(...))
+// directly, bypassing spawn_voxel_and_register(). This meant MortarBonds was always
+// empty — the mortar solver and break systems did zero work per step.
+//
+// The reported steps/sec was therefore FASTER THAN ACTUAL training performance,
+// because real training involves the mortar pipeline processing live bonds.
+//
+// FIX: All spawns now go through spawn_voxel_and_register(), which:
+//   1. Creates the voxel
+//   2. Immediately registers mortar bonds with any nearby neighbors
+//   3. Gives the mortar systems real bonds to process during warmup and timing
+//
+// The benchmark result is now an honest representation of Sprint 3 throughput.
 #[pyfunction]
 pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64, u64)> {
     // ==========================================================================
@@ -903,6 +1046,7 @@ pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64,
     ecs_world.insert_resource(SpatialGrid::default());
     ecs_world.insert_resource(PhysicsSettings::default());
     ecs_world.insert_resource(SolverBuffers::default());
+    ecs_world.insert_resource(MortarBonds::default());
 
     let mut schedule = Schedule::default();
     schedule.add_systems(
@@ -910,33 +1054,54 @@ pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64,
             world::spatial_grid::update_spatial_grid_system,
             physics::xpbd::integrate_system,
             physics::xpbd::solve_constraints_system,
+            register_new_bonds_system,
+            solve_mortar_constraints_system,
+            break_overloaded_bonds_system,
             physics::xpbd::update_velocities_system,
+            world::spatial_grid::update_spatial_grid_system,
         )
             .chain(),
     );
 
-    // Spawn blocks in a flat grid layout (avoids immediate-collapse instability
-    // from a pre-stacked tower that hasn't settled yet).
-    // A 10×10 grid fits 100 blocks; larger grids spread further.
+    // Run one spatial grid update so the grid is populated before we start
+    // calling spawn_voxel_and_register (which reads the grid for neighbor lookup).
+    // Without this, the grid is empty for the first spawn and no bonds form
+    // between the first block and any subsequent neighbors in the same column.
+    schedule.run(&mut ecs_world);
+
     let grid_w = (n_blocks as f32).sqrt().ceil() as i32;
     for i in 0..n_blocks {
         let ix = (i as i32) % grid_w;
         let iz = (i as i32) / grid_w;
-        // Interleave cubes and wedges for a stress-test of collision dispatch variety
         let shape = if i % 3 == 0 {
             ShapeType::Wedge
         } else {
             ShapeType::Cube
         };
-        ecs_world.spawn(Voxel::new(
+        // Mix materials for benchmark realism — tests bond formation and mortar
+        // constraint solving across all material combinations.
+        let material = match i % 3 {
+            0 => MaterialType::Stone, // no bonds, high friction
+            1 => MaterialType::Wood,  // light bonds
+            _ => MaterialType::Steel, // heavy, strong bonds
+        };
+
+        // SPRINT 3 FIX: Use spawn_voxel_and_register instead of direct spawn.
+        // This registers mortar bonds between neighbors so the benchmark exercises
+        // the full Sprint 3 physics pipeline — honest performance numbers.
+        spawn_voxel_and_register(
+            &mut ecs_world,
             ix as f32,
-            5.0, // drop from height 5 — they fall and settle during the benchmark
-            iz as f32, shape, false,
-        ));
+            5.0,
+            iz as f32,
+            shape,
+            material,
+            false,
+        );
     }
 
     // =========================================================================
-    // OPTIMIZATION: Warm up BEFORE starting the timer.
+    // Warm up BEFORE starting the timer.
     // -----------------------------------------------------------------------
     // The benchmark spawns all blocks at y=5.0 falling simultaneously.
     // The first ~100 steps = ALL blocks colliding at once = maximum solver work.
@@ -946,25 +1111,14 @@ pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64,
     // With warmup:    benchmark measures "settled world" speed = what RL sees.
     //
     // LEARNING: This is standard benchmark practice called "warm-up phase."
-    // JVM benchmarks warm up for JIT compilation. CPU benchmarks warm up for
-    // cache state. Physics benchmarks warm up for solver settling.
-    //
     // 200 steps at DT=1/60 = ~3.3 seconds of simulation time.
     // By then all blocks have landed and the solver handles normal stacking.
+    // =========================================================================
     for _ in 0..200 {
         schedule.run(&mut ecs_world);
     }
 
-    // =========================================================================
-    // Start timer AFTER warm-up — measure steady-state throughput
-    // =========================================================================
     let start = Instant::now();
-
-    // BATCH SIZE TUNING:
-    // Running all n_steps as one loop gives maximum cache locality.
-    // In practice, training loops call step_batch(64) or step_batch(256)
-    // per Python iteration. Both achieve similar throughput due to Bevy's
-    // archetype-based memory layout keeping Voxel data cache-hot.
     for _ in 0..n_steps {
         schedule.run(&mut ecs_world);
     }
@@ -972,8 +1126,6 @@ pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64,
     let elapsed = start.elapsed().as_secs_f64();
     let steps_per_sec = n_steps as f64 / elapsed;
 
-    // Returns (steps_per_second, total_steps) — Python can print and compare
-    // against the >2000 steps/sec target from the project requirements.
     Ok((steps_per_sec, n_steps as u64))
 }
 
@@ -993,10 +1145,6 @@ pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64,
 #[pymodule]
 fn babel_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BabelEngine>()?;
-
-    // Register the standalone benchmark function so Python can call it as:
-    //   babel_engine.run_headless_benchmark(n_blocks=100, n_steps=10000)
     m.add_function(wrap_pyfunction!(run_headless_benchmark, m)?)?;
-
     Ok(())
 }

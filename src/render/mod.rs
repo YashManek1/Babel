@@ -1,2 +1,2 @@
-pub mod wgpu_view;
 pub mod camera;
+pub mod wgpu_view;

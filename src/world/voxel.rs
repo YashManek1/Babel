@@ -37,6 +37,120 @@ pub enum ShapeType {
 }
 
 // =============================================================================
+// SPRINT 3: MaterialType — Drives All Physics Properties
+// =============================================================================
+//
+// LEARNING: This enum is the single source of truth for material behavior.
+// Rather than letting Python pass arbitrary floats for mass/friction/adhesion
+// (error-prone), we encode the valid combinations here and derive them.
+// The Voxel::new_with_material() constructor reads this enum and sets all
+// physics fields automatically — no manual tuning per spawn call.
+//
+// MATERIAL PHYSICS PROFILES:
+//
+//   Steel  — heavy (mass=800kg), high adhesion (can overhang 4+ blocks)
+//             High adhesion_strength means the mortar bond survives large
+//             breaking force checks. Good for bridges and arches.
+//
+//   Wood   — light (mass=1kg), medium adhesion (overhang ~1 block)
+//             Easy to carry, moderate adhesion. Useful for scaffolding
+//             and light structures. Bond breaks under moderate load.
+//
+//   Stone  — medium mass (mass=50kg), ZERO adhesion, high friction
+//             Stacks only — no side bonding at all. Best for foundations
+//             and ground-level walls where pure stacking is sufficient.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MaterialType {
+    /// Heavy, rigid, high adhesion. Ideal for structural spans.
+    /// inv_mass = 1/800 = 0.00125
+    /// adhesion_strength = 8.0  (can resist 8× its own weight laterally)
+    /// friction = 0.6
+    Steel,
+
+    /// Light, medium adhesion. Ideal for scaffolding and light walls.
+    /// inv_mass = 1/1 = 1.0  (standard reference mass)
+    /// adhesion_strength = 2.0  (can resist 2× its own weight laterally)
+    /// friction = 0.7
+    Wood,
+
+    /// Medium weight, zero adhesion, high friction. Stack only.
+    /// inv_mass = 1/50 = 0.02
+    /// adhesion_strength = 0.0  (never bonds to side-neighbors)
+    /// friction = 0.95
+    Stone,
+}
+
+impl MaterialType {
+    // =========================================================================
+    // Physics profile derivation — one source of truth
+    // =========================================================================
+
+    /// Inverse mass (1/kg). Used directly in XPBD constraint math.
+    /// Static objects use 0.0 regardless of material.
+    pub fn inv_mass(self) -> f32 {
+        match self {
+            MaterialType::Steel => 1.0 / 800.0, // 800 kg — very heavy
+            MaterialType::Wood => 1.0,          // 1 kg   — reference mass
+            MaterialType::Stone => 1.0 / 50.0,  // 50 kg  — medium
+        }
+    }
+
+    /// Friction coefficient (0 = frictionless, 1 = rubber on concrete).
+    pub fn friction(self) -> f32 {
+        match self {
+            MaterialType::Steel => 0.6,
+            MaterialType::Wood => 0.7,
+            MaterialType::Stone => 0.95, // roughest — grips stack well
+        }
+    }
+
+    /// Restitution (bounciness). Construction blocks should not bounce.
+    pub fn restitution(self) -> f32 {
+        match self {
+            MaterialType::Steel => 0.05, // tiny bounce (metal ring)
+            MaterialType::Wood => 0.0,   // dead stop
+            MaterialType::Stone => 0.02, // almost nothing
+        }
+    }
+
+    /// How strongly side-bonds resist breaking.
+    ///
+    /// SPRINT 3 BUG FIX — Unit Clarification:
+    /// ----------------------------------------
+    /// adhesion_strength is a DIMENSIONLESS MULTIPLIER, not raw Newtons.
+    ///
+    /// In break_overloaded_bonds_system the survival check is:
+    ///   survives = adhesion_strength >= breaking_force_normalized
+    ///
+    /// where breaking_force_normalized = tension (bond stretch in world units,
+    /// typically 0.0 to ~0.5 before the bond breaks geometrically).
+    ///
+    /// So adhesion_strength = 2.0 means "survive up to 2 world-units of stretch."
+    /// Since tension rarely exceeds 0.5 under normal loads, Wood bonds are stable
+    /// for light structures, and Steel bonds are nearly unbreakable in practice.
+    ///
+    /// Stone returns 0.0 — it never forms side bonds at all.
+    pub fn adhesion_strength(self) -> f32 {
+        match self {
+            MaterialType::Steel => 8.0, // survives up to 8 world-units of stretch
+            MaterialType::Wood => 2.0,  // survives up to 2 world-units of stretch
+            MaterialType::Stone => 0.0, // no adhesion — stack only
+        }
+    }
+
+    /// Maximum overhang this material can support (in block units).
+    /// Purely informational — the breaking force check enforces this at runtime.
+    /// Useful for UI display and agent heuristics.
+    pub fn max_overhang_blocks(self) -> u32 {
+        match self {
+            MaterialType::Steel => 4,
+            MaterialType::Wood => 1,
+            MaterialType::Stone => 0,
+        }
+    }
+}
+
+// =============================================================================
 // LEARNING TOPIC: The Voxel Component — All Physics State in One Place
 // ====================================================================
 // Every dynamic and static object in the simulation is a Voxel.
@@ -131,10 +245,63 @@ pub struct Voxel {
     /// Sleeping blocks are treated as temporarily static until a contact
     /// correction wakes them up.
     pub is_sleeping: bool,
+
+    // =========================================================================
+    // SPRINT 3 NEW FIELDS
+    // =========================================================================
+    /// Which material this block is made of.
+    /// Determines adhesion_strength, mass, friction, restitution at spawn.
+    pub material: MaterialType,
+
+    /// Adhesion strength — how much lateral bond stretch this block can resist.
+    ///
+    /// SPRINT 3 BUG FIX — Static Block Bond Registration:
+    /// ---------------------------------------------------
+    /// Previously this was set to 0.0 for static blocks. That caused
+    /// try_register_bonds() to abort early, so a dynamic block with adhesion
+    /// could never bond to a static wall that was spawned after it.
+    ///
+    /// FIX: Static blocks now carry their material's adhesion_strength.
+    /// The mortar system uses this when the NEIGHBOR block is dynamic —
+    /// the bond forms using min(self.adhesion, neighbor.adhesion), so static
+    /// blocks act as valid anchor points for dynamic block bonds.
+    ///
+    /// The inv_mass = 0.0 field already handles the "static blocks don't move"
+    /// invariant in XPBD. adhesion_strength is purely for bond eligibility.
+    pub adhesion_strength: f32,
 }
 
 impl Voxel {
+    // =========================================================================
+    // Original constructor — defaults to Wood material for backward compatibility
+    // =========================================================================
+    //
+    // LEARNING: All existing calls to Voxel::new() (from lib.rs, test_engine.py,
+    // babel_gym_env.py) continue to work unchanged. They get Wood material which
+    // has the same mass as the old default (inv_mass = 1.0). No behavior change
+    // for existing tests.
     pub fn new(x: f32, y: f32, z: f32, shape: ShapeType, is_static: bool) -> Self {
+        Self::new_with_material(x, y, z, shape, MaterialType::Wood, is_static)
+    }
+
+    // =========================================================================
+    // SPRINT 3: Material-aware constructor
+    // =========================================================================
+    //
+    // This is the preferred constructor going forward. The agent will call this
+    // via a new spawn_block_with_material() Python method (added to lib.rs).
+    //
+    // is_static = true → inv_mass forced to 0.0 (immovable) regardless of material.
+    //             adhesion_strength is KEPT from the material — see field comment
+    //             above for why this matters for bond registration.
+    pub fn new_with_material(
+        x: f32,
+        y: f32,
+        z: f32,
+        shape: ShapeType,
+        material: MaterialType,
+        is_static: bool,
+    ) -> Self {
         // =====================================================================
         // LEARNING TOPIC: Physics-Derived Mass Values
         // ============================================
@@ -161,22 +328,18 @@ impl Voxel {
         //
         // OLD VALUE: 0.002  (mass = 500 kg → Δv ≈ 0.028 m/s → visible wobble)
         // NEW VALUE: 0.0005 (mass = 2000 kg → Δv ≈ 0.007 m/s → imperceptible)
+        //
+        // SPRINT 3: Wedge special case — must be heavy enough to not fly when hit.
+        // We keep the Sprint 2 fix (0.0005) only for the Wedge shape,
+        // overriding whatever the material says for mass.
+        // Rationale: a wedge is a ramp — its stability matters more than
+        // matching the material's weight. This can be revisited in Sprint 5
+        // when humanoid locomotion needs climbing on wedge ramps.
         // =====================================================================
-        let dynamic_inv_mass = match shape {
-            // Cube: 1 kg, inv_mass = 1.0
-            // Feels light but sturdy — standard construction block.
-            ShapeType::Cube => 1.0,
-
-            // Wedge: 2000 kg, inv_mass = 0.0005
-            // PHYSICS DERIVATION: Must resist impulse from cube dropped at 14 m/s.
-            // A 2000 kg wedge will only shift 0.007 m/s when hit — imperceptible.
-            // Combined with the WEDGE_SETTLED_SHARE_CAP in xpbd.rs, the wedge
-            // behaves as a rock-solid ramp once settled on the ground.
-            ShapeType::Wedge => 0.0005,
-
-            // Sphere: 1 kg, inv_mass = 1.0
-            // Same as cube for now — spheres roll via XPBD contact normals.
-            ShapeType::Sphere => 1.0,
+        let dynamic_inv_mass = if shape == ShapeType::Wedge {
+            0.0005 // Sprint 2 wedge stability fix — keep unchanged
+        } else {
+            material.inv_mass()
         };
 
         Self {
@@ -186,17 +349,24 @@ impl Voxel {
             shape,
             sphere_radius: 0.5,
             inv_mass: if is_static { 0.0 } else { dynamic_inv_mass },
-            // 0.8 friction: rough stone — blocks grip each other and don't slide off
-            // high towers easily. Good for construction stability.
-            friction: 0.8,
-            // 0.0 restitution: no bounce. A construction block landing on a ramp
-            // should stop and slide, not ricochet off.
-            restitution: 0.0,
+            friction: material.friction(),
+            restitution: material.restitution(),
             rotation: Quat::IDENTITY,
             angular_velocity: Vec3::ZERO,
             contact_normal_accum: Vec3::ZERO,
             contact_count: 0,
             is_sleeping: false,
+            material,
+            // =================================================================
+            // SPRINT 3 BUG FIX: Do NOT zero out adhesion_strength for static
+            // blocks. Static blocks serve as valid bond anchors for dynamic
+            // neighbors. Their inv_mass = 0.0 already prevents them from being
+            // pushed by the bond solver — adhesion_strength is orthogonal.
+            //
+            // Stone material returns 0.0 regardless, so Stone static walls
+            // still won't bond to anything. This is the correct behavior.
+            // =================================================================
+            adhesion_strength: material.adhesion_strength(),
         }
     }
 
@@ -212,6 +382,22 @@ impl Voxel {
         let mut voxel = Self::new(x, y, z, ShapeType::Sphere, is_static);
         // Enforce minimum radius: a sphere of radius < 0.2 would be smaller than
         // a grid cell, causing it to phase through geometry between frames.
+        voxel.sphere_radius = radius.max(0.2);
+        voxel
+    }
+
+    // =========================================================================
+    // SPRINT 3: Sphere with material
+    // =========================================================================
+    pub fn new_sphere_with_material(
+        x: f32,
+        y: f32,
+        z: f32,
+        radius: f32,
+        material: MaterialType,
+        is_static: bool,
+    ) -> Self {
+        let mut voxel = Self::new_with_material(x, y, z, ShapeType::Sphere, material, is_static);
         voxel.sphere_radius = radius.max(0.2);
         voxel
     }

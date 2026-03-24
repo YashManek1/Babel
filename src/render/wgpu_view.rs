@@ -1,5 +1,5 @@
 use crate::render::camera::FreecamState;
-use crate::world::voxel::{ShapeType, Voxel};
+use crate::world::voxel::{MaterialType, ShapeType, Voxel};
 use glam::{Mat4, Vec3};
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
@@ -19,9 +19,22 @@ use winit::{
 // them into a Vec. After rendering finishes, the engine safely reads that Vec
 // and spawns the actual Voxel entities into ECS. Zero shared mutable state.
 pub enum UiCommand {
-    SpawnCube { x: f32, z: f32 },
-    SpawnWedge { x: f32, z: f32 },
-    SpawnSphere { x: f32, z: f32, radius: f32 },
+    SpawnCube {
+        x: f32,
+        z: f32,
+        material_id: u8,
+    },
+    SpawnWedge {
+        x: f32,
+        z: f32,
+        material_id: u8,
+    },
+    SpawnSphere {
+        x: f32,
+        z: f32,
+        radius: f32,
+        material_id: u8,
+    },
 }
 
 // =============================================================================
@@ -238,9 +251,21 @@ fn push_sphere_mesh(
 //   Level 3+:           cycle through a palette
 //
 // This is NOT Z-fighting prevention — it's purely visual communication.
-fn height_to_color(_y: f32, _shape: &ShapeType) -> [f32; 3] {
-    // Unified material color: all objects render as wood.
-    [0.70, 0.52, 0.32]
+// We now preserve that readability by applying a slight height tint on top of
+// the block's material base color, so Wood/Steel/Stone remain visually distinct.
+fn height_to_color(voxel: &Voxel) -> [f32; 3] {
+    let base = match voxel.material {
+        MaterialType::Wood => [0.70, 0.52, 0.32],
+        MaterialType::Steel => [0.55, 0.60, 0.68],
+        MaterialType::Stone => [0.62, 0.62, 0.58],
+    };
+
+    let height_boost = ((voxel.position.y.max(0.0) / 12.0) * 0.10).min(0.10);
+    [
+        (base[0] + height_boost).min(1.0),
+        (base[1] + height_boost).min(1.0),
+        (base[2] + height_boost).min(1.0),
+    ]
 }
 
 // =============================================================================
@@ -374,7 +399,7 @@ fn build_mesh(voxels: &[&Voxel], tx: f32, tz: f32) -> (Vec<Vertex>, Vec<u32>, Ve
         //   rather than "disappear."
         let render_pos = voxel.position; // Exact position — no artificial epsilon
 
-        let color = height_to_color(voxel.position.y, &voxel.shape);
+        let color = height_to_color(voxel);
 
         match voxel.shape {
             ShapeType::Cube => push_cube_mesh(
@@ -427,6 +452,7 @@ pub struct RenderContext {
     pub spawn_x: f32,
     pub spawn_z: f32,
     sphere_r: f32,
+    selected_material_id: u8,
     pub camera: FreecamState,
 }
 
@@ -654,6 +680,7 @@ impl RenderContext {
             spawn_x: 0.0,
             spawn_z: 0.0,
             sphere_r: 1.0,
+            selected_material_id: 0,
             camera,
         })
     }
@@ -775,16 +802,32 @@ impl RenderContext {
                     "Target Ground: [{}, {}]",
                     self.spawn_x, self.spawn_z
                 ));
+                ui.separator();
+                ui.label("Material:");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.selected_material_id, 0, "Wood");
+                    ui.selectable_value(&mut self.selected_material_id, 1, "Steel");
+                    ui.selectable_value(&mut self.selected_material_id, 2, "Stone");
+                });
+                let material_hint = match self.selected_material_id {
+                    0 => "Wood: medium adhesion, light weight",
+                    1 => "Steel: high adhesion, heavy weight",
+                    2 => "Stone: no adhesion, high friction",
+                    _ => "Wood: medium adhesion, light weight",
+                };
+                ui.label(material_hint);
                 if ui.button("Spawn Cube").clicked() {
                     commands.push(UiCommand::SpawnCube {
                         x: self.spawn_x,
                         z: self.spawn_z,
+                        material_id: self.selected_material_id,
                     });
                 }
                 if ui.button("Spawn Wedge").clicked() {
                     commands.push(UiCommand::SpawnWedge {
                         x: self.spawn_x,
                         z: self.spawn_z,
+                        material_id: self.selected_material_id,
                     });
                 }
                 ui.separator();
@@ -794,6 +837,7 @@ impl RenderContext {
                         x: self.spawn_x,
                         z: self.spawn_z,
                         radius: self.sphere_r,
+                        material_id: self.selected_material_id,
                     });
                 }
             });
