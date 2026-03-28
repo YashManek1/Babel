@@ -205,6 +205,44 @@ const WEDGE_SETTLED_SPEED_THRESHOLD: f32 = 0.5;
 const WEDGE_SETTLED_SHARE_CAP: f32 = 0.001;
 
 // =============================================================================
+// BUG FIX #3: LATERAL IMPACT ANCHOR CLAMP (Pillar Side-Drag)
+// =============================================================================
+//
+// THE BUG:
+//   A side-attached block can collide laterally with a settled pillar block.
+//   For equal-mass materials (e.g., steel-on-steel), the default XPBD share
+//   split is ~50/50, so the pillar absorbs half the correction and begins to
+//   drift sideways. Because the pillar is stacked, that drift propagates up/down
+//   the column and looks like "the whole pillar being dragged by one side block".
+//
+// THE FIX:
+//   For mostly-lateral contacts, if one body is already settled (very low speed)
+//   and the other is still moving, treat the settled body as an anchor by
+//   clamping its correction share to a tiny value. The moving body absorbs
+//   almost all side-penetration correction.
+//
+// WHY ONLY LATERAL CONTACTS:
+//   Vertical contacts (stacking) should keep normal mass-based sharing.
+//   We only intervene when the contact normal is near-horizontal.
+// =============================================================================
+
+/// Max |normal.y| still considered a mostly-lateral (side impact) contact.
+const LATERAL_CONTACT_MAX_Y: f32 = 0.30;
+
+/// Speed below which a body is considered settled for lateral anchor clamping.
+const SETTLED_ANCHOR_SPEED_THRESHOLD: f32 = 0.80;
+
+/// Maximum correction share a settled lateral anchor can absorb.
+const SETTLED_ANCHOR_SHARE_CAP: f32 = 0.0;
+
+/// Minimum correction magnitude required to wake a sleeping body.
+///
+/// LEARNING: Using an extremely small wake epsilon causes settled stacks to
+/// wake on floating-point dust corrections. A practical threshold prevents
+/// sleep-chatter and removes visible steel vibration at rest.
+const WAKE_CORRECTION_EPS: f32 = 0.0015;
+
+// =============================================================================
 // OPTIMIZATION: SolverBuffers Pre-Sizing Capacity
 // =============================================================================
 //
@@ -917,6 +955,37 @@ pub fn solve_constraints_system(
             }
         }
 
+        // LEARNING: Contact-based "settled" checks can flicker when stacked
+        // blocks are near-touching but not actively penetrating this iteration.
+        // Build a cheap column-support map from snapshot positions so upper
+        // pillar blocks are still treated as anchors for lateral impacts.
+        let mut stack_supported_by_idx = vec![false; buffers.snapshots.len()];
+        let mut columns: std::collections::HashMap<(i32, i32), Vec<(usize, f32)>> =
+            std::collections::HashMap::with_capacity(buffers.snapshots.len());
+        for (idx, body) in buffers.snapshots.iter().enumerate() {
+            columns
+                .entry((
+                    body.predicted_position.x.round() as i32,
+                    body.predicted_position.z.round() as i32,
+                ))
+                .or_default()
+                .push((idx, body.predicted_position.y));
+        }
+        for members in columns.values_mut() {
+            members.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            for i in 0..members.len() {
+                let (idx_i, y_i) = members[i];
+                for j in 0..i {
+                    let (_, y_j) = members[j];
+                    let dy = y_i - y_j;
+                    if dy >= 0.70 && dy <= 1.30 {
+                        stack_supported_by_idx[idx_i] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         // ── STEP B: Process each entity's constraints ─────────────────────────
         for (entity, voxel) in query.iter() {
             if voxel.is_sleeping {
@@ -1055,6 +1124,10 @@ pub fn solve_constraints_system(
                 let mut self_share = self_inv_mass / inv_mass_sum;
                 let mut other_share = other_inv_mass / inv_mass_sum;
 
+                // Relative speeds from snapshot displacement (stable and cheap).
+                let self_speed = (self_pos - self_prev_pos).length() / DT;
+                let other_speed = (other_pos - other_prev_pos).length() / DT;
+
                 // =============================================================
                 // BUG FIX #2: Wedge Stability — Settled-Wedge Detection
                 // =============================================================
@@ -1063,17 +1136,42 @@ pub fn solve_constraints_system(
 
                 if self_is_wedge ^ other_is_wedge {
                     if self_is_wedge {
-                        let self_speed = (self_pos - self_prev_pos).length() / DT;
                         if self_inv_mass < 0.001 && self_speed < WEDGE_SETTLED_SPEED_THRESHOLD {
                             self_share = self_share.min(WEDGE_SETTLED_SHARE_CAP);
                             other_share = 1.0 - self_share;
                         }
                     } else {
-                        let other_speed = (other_pos - other_prev_pos).length() / DT;
                         if other_inv_mass < 0.001 && other_speed < WEDGE_SETTLED_SPEED_THRESHOLD {
                             other_share = other_share.min(WEDGE_SETTLED_SHARE_CAP);
                             self_share = 1.0 - other_share;
                         }
+                    }
+                }
+
+                // =============================================================
+                // BUG FIX #3: Lateral Impact Anchor Clamp
+                // =============================================================
+                // LEARNING: This is intentionally orthogonal to the wedge logic.
+                // Wedge handling targets ramp stability; this targets any settled
+                // structure resisting side pushes from moving neighbors.
+                if c.normal.y.abs() <= LATERAL_CONTACT_MAX_Y {
+                    let self_settled = self_speed <= SETTLED_ANCHOR_SPEED_THRESHOLD;
+                    let other_settled = other_speed <= SETTLED_ANCHOR_SPEED_THRESHOLD;
+                    let self_stack_supported = stack_supported_by_idx[self_idx];
+                    let other_stack_supported = stack_supported_by_idx[other_idx];
+
+                    if self_stack_supported && !other_stack_supported {
+                        self_share = self_share.min(SETTLED_ANCHOR_SHARE_CAP);
+                        other_share = 1.0 - self_share;
+                    } else if other_stack_supported && !self_stack_supported {
+                        other_share = other_share.min(SETTLED_ANCHOR_SHARE_CAP);
+                        self_share = 1.0 - other_share;
+                    } else if self_settled && !other_settled {
+                        self_share = self_share.min(SETTLED_ANCHOR_SHARE_CAP);
+                        other_share = 1.0 - self_share;
+                    } else if other_settled && !self_settled {
+                        other_share = other_share.min(SETTLED_ANCHOR_SHARE_CAP);
+                        self_share = 1.0 - other_share;
                     }
                 }
 
@@ -1120,7 +1218,7 @@ pub fn solve_constraints_system(
                 v.predicted_position += corr;
 
                 // Any meaningful correction wakes a sleeping body.
-                if corr.length_squared() > 1e-8 {
+                if corr.length_squared() > WAKE_CORRECTION_EPS * WAKE_CORRECTION_EPS {
                     v.is_sleeping = false;
                 }
 

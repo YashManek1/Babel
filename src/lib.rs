@@ -141,6 +141,19 @@ use world::voxel::{MaterialType, ShapeType, Voxel};
 // =============================================================================
 const MAX_STACK_HEIGHT: i32 = 16;
 
+/// Extra Y clearance used when spawning above an existing column.
+///
+/// LEARNING: A very large drop height injects unnecessary impact energy,
+/// which appears as bounce/jitter on tall pillars (especially steel). Keeping
+/// a small but safe clearance preserves placement reliability without harsh
+/// collision impulses.
+const OCCUPIED_COLUMN_SPAWN_CLEARANCE: f32 = 1.25;
+
+/// Extra Y clearance for empty columns that are adjacent to existing blocks.
+/// Keeps side placements close to local ledge height so they attach with
+/// lower impact energy instead of hammering short pillars from above.
+const ADJACENT_COLUMN_SPAWN_CLEARANCE: f32 = 0.35;
+
 fn material_from_id(material_id: u8) -> MaterialType {
     match material_id {
         0 => MaterialType::Wood,
@@ -154,9 +167,32 @@ fn safe_spawn_height_for_grid(grid: &SpatialGrid, gx: i32, gz: i32) -> f32 {
     match grid.column_max_y(gx, gz) {
         Some(y) => {
             let capped = y.min(MAX_STACK_HEIGHT);
-            capped as f32 + 5.0
+            capped as f32 + OCCUPIED_COLUMN_SPAWN_CLEARANCE
         }
-        None => 5.0,
+        None => {
+            // When the target column is empty but sits next to an existing
+            // structure, spawn near the tallest local neighbor so side drops
+            // engage upper blocks instead of bonding only at ground level.
+            let mut local_neighbor_top: Option<i32> = None;
+            for nx in -1..=1 {
+                for nz in -1..=1 {
+                    if nx == 0 && nz == 0 {
+                        continue;
+                    }
+                    if let Some(ny) = grid.column_max_y(gx + nx, gz + nz) {
+                        local_neighbor_top = Some(match local_neighbor_top {
+                            Some(current) => current.max(ny),
+                            None => ny,
+                        });
+                    }
+                }
+            }
+
+            match local_neighbor_top {
+                Some(y) => y.min(MAX_STACK_HEIGHT) as f32 + ADJACENT_COLUMN_SPAWN_CLEARANCE,
+                None => 5.0,
+            }
+        }
     }
 }
 

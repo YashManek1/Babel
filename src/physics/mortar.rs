@@ -61,17 +61,24 @@ const BOND_REST_DISTANCE: f32 = 1.0;
 /// LEARNING: Settled stacks are not perfectly grid-aligned every frame. Using a
 /// strict same-Y-cell requirement prevents valid sideways bonds from registering.
 /// This tolerance restores intended attachment without enabling vertical glue.
-const SIDE_BOND_VERTICAL_TOLERANCE: f32 = 2.25;
+const SIDE_BOND_VERTICAL_TOLERANCE: f32 = 0.70;
 
 /// Allowed error around 1.0-unit lateral spacing for side-bond registration.
-const SIDE_BOND_LATERAL_TOLERANCE: f32 = 0.75;
+const SIDE_BOND_LATERAL_TOLERANCE: f32 = 0.35;
 
 /// Minimum horizontal separation to classify a neighbor as side-contact.
 /// Prevents pure vertical stacks (dx≈0, dz≈0) from becoming bonded.
-const SIDE_BOND_MIN_HORIZONTAL_SEP: f32 = 0.55;
+const SIDE_BOND_MIN_HORIZONTAL_SEP: f32 = 0.72;
 
 /// Max orthogonal horizontal offset still accepted for side/corner attachment.
-const SIDE_BOND_ORTHOGONAL_MAX: f32 = 1.05;
+const SIDE_BOND_ORTHOGONAL_MAX: f32 = 0.45;
+
+/// Number of Y-cells to search above/below the current rounded Y for side bonds.
+///
+/// LEARNING: A narrow vertical search window is both a correctness and
+/// performance win. Wide windows caused one side block to bind to an entire
+/// pillar, while also multiplying HashMap probes each frame.
+const SIDE_BOND_SEARCH_Y_BAND: i32 = 1;
 
 // =============================================================================
 // BUG FIX: MASS-PROPORTIONAL COMPLIANCE (Issue 3a — Steel-on-Steel Vibration)
@@ -164,7 +171,7 @@ const BASE_BOND_COMPLIANCE_FACTOR: f32 = 0.5;
 /// A bond stretched 0.5 units is a very loose bond — if it can't close in
 /// 0.5 units per frame, the block is probably being pulled by a strong force
 /// (gravity on a steep overhang) and should eventually break.
-const MAX_BOND_CORRECTION: f32 = 0.05;
+const MAX_BOND_CORRECTION: f32 = 0.03;
 
 /// Maximum averaged mortar displacement applied to a single entity per physics step.
 ///
@@ -172,14 +179,28 @@ const MAX_BOND_CORRECTION: f32 = 0.05;
 /// averaging, simultaneous pulls can still create visible "drag the whole pillar"
 /// behavior in one frame. This cap limits mortar's authority so collision +
 /// gravity remain dominant and structural movement stays smooth.
-const MAX_ENTITY_MORTAR_STEP: f32 = 0.035;
+const MAX_ENTITY_MORTAR_STEP: f32 = 0.025;
+
+/// Ignore tiny stretch violations to avoid solver "buzz" at rest.
+///
+/// LEARNING: With heavy materials and finite precision, bonds can report a
+/// microscopic non-zero stretch forever. Solving those tiny errors each frame
+/// keeps bodies awake and produces visible vibration on steel contacts.
+const BOND_MICRO_TENSION_EPS: f32 = 0.008;
+
+/// If both bonded bodies are floor-supported, relax tiny stretch mismatch.
+///
+/// LEARNING: Ground-level side contacts are already collision-supported. For
+/// very small bond stretch we can skip correction and let sleep dominate,
+/// removing persistent steel-on-steel jitter without affecting hanging arches.
+const SUPPORTED_PAIR_RELAX_TENSION: f32 = 0.020;
 
 /// If a block is floor-supported, cap how much bond-share it can absorb.
 ///
 /// LEARNING: Supported heavy anchors (especially steel columns) should not be
 /// laterally dragged by freshly-placed neighbors. We keep a small non-zero share
 /// so bonds still converge, but prevent whole-pillar translation.
-const SUPPORTED_ANCHOR_SHARE_CAP: f32 = 0.08;
+const SUPPORTED_ANCHOR_SHARE_CAP: f32 = 0.0;
 
 // =============================================================================
 // BUG FIX: MINIMUM TENSION WAKE THRESHOLD (Issue 3b — Pillar Flying)
@@ -263,10 +284,59 @@ const FLOOR_SUPPORTED_NORMAL_Y: f32 = 0.90;
 /// LEARNING: Contact normals can flicker during settle transitions. We require
 /// low speed in addition to an upward average normal before classifying a block
 /// as floor-supported for the mortar Y-lift clamp.
-const SUPPORT_STABLE_SPEED: f32 = 0.35;
+const SUPPORT_STABLE_SPEED: f32 = 1.5;
 
 fn shape_supports_mortar(shape: ShapeType) -> bool {
     !matches!(shape, ShapeType::Sphere)
+}
+
+fn canonical_pair(a: Entity, b: Entity) -> (Entity, Entity) {
+    if a.index() < b.index() {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+enum SideDirection {
+    PosX,
+    NegX,
+    PosZ,
+    NegZ,
+}
+
+fn side_direction_from_axis(axis: Vec3) -> Option<SideDirection> {
+    if !axis.is_finite() {
+        return None;
+    }
+
+    if axis.x.abs() > 0.5 && axis.z.abs() < 0.5 {
+        return Some(if axis.x >= 0.0 {
+            SideDirection::PosX
+        } else {
+            SideDirection::NegX
+        });
+    }
+
+    if axis.z.abs() > 0.5 && axis.x.abs() < 0.5 {
+        return Some(if axis.z >= 0.0 {
+            SideDirection::PosZ
+        } else {
+            SideDirection::NegZ
+        });
+    }
+
+    None
+}
+
+fn opposite_side_direction(dir: SideDirection) -> SideDirection {
+    match dir {
+        SideDirection::PosX => SideDirection::NegX,
+        SideDirection::NegX => SideDirection::PosX,
+        SideDirection::PosZ => SideDirection::NegZ,
+        SideDirection::NegZ => SideDirection::PosZ,
+    }
 }
 
 /// Returns a pure horizontal side-bond axis when two blocks are laterally adjacent.
@@ -299,6 +369,72 @@ fn compute_side_bond_axis(delta: Vec3) -> Option<Vec3> {
     }
 
     None
+}
+
+#[derive(Clone, Copy)]
+struct SideBondCandidate {
+    entity: Entity,
+    bond_axis: Vec3,
+    direction: SideDirection,
+    bond_strength: f32,
+    neighbor_y: f32,
+    vertical_gap: f32,
+    lateral_error: f32,
+    orth_offset: f32,
+}
+
+fn side_bond_metrics(delta: Vec3, bond_axis: Vec3) -> (f32, f32, f32) {
+    let vertical_gap = delta.y.abs();
+    if bond_axis.x.abs() > 0.5 {
+        (
+            vertical_gap,
+            (delta.x.abs() - BOND_REST_DISTANCE).abs(),
+            delta.z.abs(),
+        )
+    } else {
+        (
+            vertical_gap,
+            (delta.z.abs() - BOND_REST_DISTANCE).abs(),
+            delta.x.abs(),
+        )
+    }
+}
+
+fn should_replace_side_candidate(
+    current: Option<&SideBondCandidate>,
+    candidate: &SideBondCandidate,
+) -> bool {
+    // LEARNING: We sort candidates by gameplay intent first (higher anchor),
+    // then geometric quality (closer Y, cleaner lateral fit). This biases side
+    // attachments toward the "top ledge" behavior needed for arches.
+    let Some(existing) = current else {
+        return true;
+    };
+
+    const EPS: f32 = 1e-4;
+
+    if candidate.neighbor_y > existing.neighbor_y + EPS {
+        return true;
+    }
+    if existing.neighbor_y > candidate.neighbor_y + EPS {
+        return false;
+    }
+
+    if candidate.vertical_gap + EPS < existing.vertical_gap {
+        return true;
+    }
+    if existing.vertical_gap + EPS < candidate.vertical_gap {
+        return false;
+    }
+
+    if candidate.orth_offset + EPS < existing.orth_offset {
+        return true;
+    }
+    if existing.orth_offset + EPS < candidate.orth_offset {
+        return false;
+    }
+
+    candidate.lateral_error + EPS < existing.lateral_error
 }
 
 // =============================================================================
@@ -380,17 +516,17 @@ impl MortarBonds {
         adhesion_strength: f32,
         bond_axis: Vec3,
     ) {
-        let (entity_a, entity_b) = if a.index() < b.index() {
-            (a, b)
+        let (entity_a, entity_b, axis_a_to_b) = if a.index() < b.index() {
+            (a, b, bond_axis)
         } else {
-            (b, a)
+            (b, a, -bond_axis)
         };
         self.bonds.push(MortarBond {
             entity_a,
             entity_b,
             rest_distance,
             adhesion_strength,
-            bond_axis,
+            bond_axis: axis_a_to_b.normalize_or_zero(),
             tension: 0.0,
         });
     }
@@ -451,7 +587,9 @@ pub fn try_register_bonds(
     let face_offsets: [[i32; 3]; 4] = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
 
     for offset in &face_offsets {
-        for y_band in -3..=3 {
+        let mut best_candidate: Option<SideBondCandidate> = None;
+
+        for y_band in -SIDE_BOND_SEARCH_Y_BAND..=SIDE_BOND_SEARCH_Y_BAND {
             let neighbor_grid = [
                 new_pos.x.round() as i32 + offset[0],
                 new_pos.y.round() as i32 + y_band,
@@ -490,15 +628,38 @@ pub fn try_register_bonds(
                         continue;
                     }
 
-                    bonds.add_bond(
-                        new_entity,
-                        neighbor_entity,
-                        BOND_REST_DISTANCE,
-                        bond_strength,
+                    let Some(direction) = side_direction_from_axis(bond_axis) else {
+                        continue;
+                    };
+
+                    let (vertical_gap, lateral_error, orth_offset) =
+                        side_bond_metrics(delta, bond_axis);
+                    let candidate = SideBondCandidate {
+                        entity: neighbor_entity,
                         bond_axis,
-                    );
+                        direction,
+                        bond_strength,
+                        neighbor_y: neighbor_voxel.position.y,
+                        vertical_gap,
+                        lateral_error,
+                        orth_offset,
+                    };
+
+                    if should_replace_side_candidate(best_candidate.as_ref(), &candidate) {
+                        best_candidate = Some(candidate);
+                    }
                 }
             }
+        }
+
+        if let Some(candidate) = best_candidate {
+            bonds.add_bond(
+                new_entity,
+                candidate.entity,
+                BOND_REST_DISTANCE,
+                candidate.bond_strength,
+                candidate.bond_axis,
+            );
         }
     }
 }
@@ -519,7 +680,7 @@ pub fn register_new_bonds_system(
     query: Query<(Entity, &Voxel)>,
     mut bonds: ResMut<MortarBonds>,
 ) {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     // Snapshot adhesion/positions so neighbor lookups don't need random query access.
     let mut adhesion_by_entity: HashMap<Entity, f32> = HashMap::with_capacity(query.iter().len());
@@ -529,8 +690,28 @@ pub fn register_new_bonds_system(
         pos_by_entity.insert(entity, voxel.predicted_position);
     }
 
+    // LEARNING: has_bond() is O(num_bonds). For per-frame registration, build
+    // a temporary pair set so candidate checks are O(1) average.
+    let mut existing_pairs: HashSet<(Entity, Entity)> =
+        HashSet::with_capacity((bonds.bonds.len() * 2).max(16));
+    let mut occupied_slots: HashSet<(Entity, SideDirection)> =
+        HashSet::with_capacity((bonds.bonds.len() * 2).max(16));
+    for bond in bonds.bonds.iter() {
+        existing_pairs.insert((bond.entity_a, bond.entity_b));
+        if let Some(dir_a) = side_direction_from_axis(bond.bond_axis) {
+            occupied_slots.insert((bond.entity_a, dir_a));
+            occupied_slots.insert((bond.entity_b, opposite_side_direction(dir_a)));
+        }
+    }
+
     // Side-neighbor bonds only (see try_register_bonds).
     let face_offsets: [[i32; 3]; 4] = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+
+    // LEARNING: Build a candidate queue first, then greedily accept in priority
+    // order. This removes query-iteration bias and ensures higher-side anchors
+    // are chosen before lower competing faces.
+    let mut candidate_queue: Vec<(Entity, SideBondCandidate)> =
+        Vec::with_capacity(query.iter().len() * face_offsets.len());
 
     for (entity, voxel) in query.iter() {
         if !shape_supports_mortar(voxel.shape) {
@@ -542,7 +723,9 @@ pub fn register_new_bonds_system(
 
         let pos = voxel.predicted_position;
         for offset in &face_offsets {
-            for y_band in -3..=3 {
+            let mut best_candidate: Option<SideBondCandidate> = None;
+
+            for y_band in -SIDE_BOND_SEARCH_Y_BAND..=SIDE_BOND_SEARCH_Y_BAND {
                 let neighbor_grid = [
                     pos.x.round() as i32 + offset[0],
                     pos.y.round() as i32 + y_band,
@@ -557,7 +740,9 @@ pub fn register_new_bonds_system(
                         if !shape_supports_mortar(neighbor_shape) {
                             continue;
                         }
-                        if bonds.has_bond(entity, neighbor_entity) {
+
+                        let pair = canonical_pair(entity, neighbor_entity);
+                        if existing_pairs.contains(&pair) {
                             continue;
                         }
 
@@ -579,18 +764,82 @@ pub fn register_new_bonds_system(
                         let Some(bond_axis) = compute_side_bond_axis(delta) else {
                             continue;
                         };
+                        let Some(direction) = side_direction_from_axis(bond_axis) else {
+                            continue;
+                        };
 
-                        bonds.add_bond(
-                            entity,
-                            neighbor_entity,
-                            BOND_REST_DISTANCE,
-                            bond_strength,
+                        let (vertical_gap, lateral_error, orth_offset) =
+                            side_bond_metrics(delta, bond_axis);
+                        let candidate = SideBondCandidate {
+                            entity: neighbor_entity,
                             bond_axis,
-                        );
+                            direction,
+                            bond_strength,
+                            neighbor_y: neighbor_pos.y,
+                            vertical_gap,
+                            lateral_error,
+                            orth_offset,
+                        };
+
+                        if should_replace_side_candidate(best_candidate.as_ref(), &candidate) {
+                            best_candidate = Some(candidate);
+                        }
                     }
                 }
             }
+
+            if let Some(candidate) = best_candidate {
+                candidate_queue.push((entity, candidate));
+            }
         }
+    }
+
+    candidate_queue.sort_by(|(_, a), (_, b)| {
+        b.neighbor_y
+            .partial_cmp(&a.neighbor_y)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                a.vertical_gap
+                    .partial_cmp(&b.vertical_gap)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                a.orth_offset
+                    .partial_cmp(&b.orth_offset)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                a.lateral_error
+                    .partial_cmp(&b.lateral_error)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+
+    for (entity, candidate) in candidate_queue {
+        let pair = canonical_pair(entity, candidate.entity);
+        if existing_pairs.contains(&pair) {
+            continue;
+        }
+
+        let src_slot = (entity, candidate.direction);
+        let dst_slot = (
+            candidate.entity,
+            opposite_side_direction(candidate.direction),
+        );
+        if occupied_slots.contains(&src_slot) || occupied_slots.contains(&dst_slot) {
+            continue;
+        }
+
+        existing_pairs.insert(pair);
+        occupied_slots.insert(src_slot);
+        occupied_slots.insert(dst_slot);
+        bonds.add_bond(
+            entity,
+            candidate.entity,
+            BOND_REST_DISTANCE,
+            candidate.bond_strength,
+            candidate.bond_axis,
+        );
     }
 }
 
@@ -637,6 +886,10 @@ pub fn solve_mortar_constraints_system(
     mut query: Query<(Entity, &mut Voxel)>,
     mut bonds: ResMut<MortarBonds>,
 ) {
+    if bonds.bonds.is_empty() {
+        return;
+    }
+
     // We can't mutate two entities simultaneously from a single query.
     // The snapshot pattern freezes positions, accumulates corrections, applies all at once.
     // This is the Jacobi iteration approach (parallel constraint solving).
@@ -664,6 +917,36 @@ pub fn solve_mortar_constraints_system(
         );
     }
 
+    // LEARNING: Contact-based support can flicker for stacked blocks that are
+    // numerically very close but not currently penetrating. Detect support from
+    // column geometry as a fallback so upper pillar blocks stay anchored.
+    let mut stack_supported: HashMap<Entity, bool> = HashMap::with_capacity(snapshots.len());
+    let mut columns: HashMap<(i32, i32), Vec<(Entity, f32)>> =
+        HashMap::with_capacity(snapshots.len());
+    for (entity, (pos, _, _, _, _, _)) in snapshots.iter() {
+        columns
+            .entry((pos.x.round() as i32, pos.z.round() as i32))
+            .or_default()
+            .push((*entity, pos.y));
+    }
+
+    for members in columns.values_mut() {
+        members.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        for i in 0..members.len() {
+            let (entity_i, y_i) = members[i];
+            let mut has_support_below = false;
+            for j in 0..i {
+                let (_, y_j) = members[j];
+                let dy = y_i - y_j;
+                if dy >= 0.70 && dy <= 1.30 {
+                    has_support_below = true;
+                    break;
+                }
+            }
+            stack_supported.insert(entity_i, has_support_below);
+        }
+    }
+
     // --- Pass 2: Compute corrections for each bond ---
     // SPRINT 3 FIX: Track both accumulated correction AND count per entity.
     // We'll divide by count in Pass 3 to get the average (Jacobi averaging).
@@ -685,21 +968,27 @@ pub fn solve_mortar_constraints_system(
             continue;
         };
 
+        // LEARNING: Use full 3D separation for stretch. Axis-only stretch lets a
+        // side-bonded block slide vertically (it can fall while still "bonded").
+        // Full-distance stretch restores true fixed-distance behavior for arches.
         let delta = pos_a - pos_b;
-        // LEARNING: Constrain mortar stretch to the ORIGINAL bond axis.
-        // This prevents off-axis drag (e.g., behind-contact introducing X drift)
-        // and keeps bonds behaving like side adhesion instead of full 3D welds.
-        let axis = bond.bond_axis.normalize_or_zero();
-        if axis == Vec3::ZERO {
+        let distance_sq = delta.length_squared();
+        if distance_sq <= 1e-12 {
             bond.tension = 0.0;
             continue;
         }
-        let signed_axis_sep = delta.dot(axis);
-        let axis_dist = signed_axis_sep.abs();
-        let violation = axis_dist - bond.rest_distance;
+        let distance = distance_sq.sqrt();
+        let violation = distance - bond.rest_distance;
 
         // Only resist stretching (separation). Compression is handled by collision solver.
         if violation <= 0.0 {
+            bond.tension = 0.0;
+            continue;
+        }
+
+        // LEARNING: Tiny stretch noise should not be solved every frame.
+        // This deadzone prevents steady-state steel jitter.
+        if violation < BOND_MICRO_TENSION_EPS {
             bond.tension = 0.0;
             continue;
         }
@@ -750,19 +1039,34 @@ pub fn solve_mortar_constraints_system(
         let correction_magnitude =
             (violation * (1.0 / (inv_mass_sum + compliance))).min(MAX_BOND_CORRECTION);
 
-        let direction = if signed_axis_sep >= 0.0 { axis } else { -axis }; // from B to A along bond axis
+        // from B to A along the current center-to-center direction
+        let direction = delta / distance;
 
         // Check if block A is floor-supported (upward contact normal)
         let a_is_floor_supported = contacts_a > 0 && {
             let avg_n = (normal_accum_a / contacts_a as f32).normalize_or_zero();
             avg_n.y >= FLOOR_SUPPORTED_NORMAL_Y && vel_a.length() <= SUPPORT_STABLE_SPEED
-        };
+        } || stack_supported
+            .get(&bond.entity_a)
+            .copied()
+            .unwrap_or(false);
 
         // Check if block B is floor-supported
         let b_is_floor_supported = contacts_b > 0 && {
             let avg_n = (normal_accum_b / contacts_b as f32).normalize_or_zero();
             avg_n.y >= FLOOR_SUPPORTED_NORMAL_Y && vel_b.length() <= SUPPORT_STABLE_SPEED
-        };
+        } || stack_supported
+            .get(&bond.entity_b)
+            .copied()
+            .unwrap_or(false);
+
+        // LEARNING: If both bodies are already stably supported and stretch is
+        // small, skip mortar correction to let sleep absorb residual chatter.
+        if a_is_floor_supported && b_is_floor_supported && violation < SUPPORTED_PAIR_RELAX_TENSION
+        {
+            bond.tension = 0.0;
+            continue;
+        }
 
         // Push A toward B (negative direction), scaled by A's mass share
         let mut self_share = inv_a / inv_mass_sum;
@@ -770,13 +1074,17 @@ pub fn solve_mortar_constraints_system(
 
         // LEARNING: Supported anchors should move very little under mortar.
         // Reassign most correction to the non-supported counterpart.
-        if a_is_floor_supported {
+        if a_is_floor_supported && !b_is_floor_supported {
             self_share = self_share.min(SUPPORTED_ANCHOR_SHARE_CAP);
             other_share = 1.0 - self_share;
-        }
-        if b_is_floor_supported {
+        } else if b_is_floor_supported && !a_is_floor_supported {
             other_share = other_share.min(SUPPORTED_ANCHOR_SHARE_CAP);
             self_share = 1.0 - other_share;
+        } else if a_is_floor_supported && b_is_floor_supported {
+            // LEARNING: If both sides are already supported, keep mortar influence
+            // tiny and symmetric. This avoids order-dependent sideways drift.
+            self_share = self_share.min(SUPPORTED_ANCHOR_SHARE_CAP);
+            other_share = other_share.min(SUPPORTED_ANCHOR_SHARE_CAP);
         }
 
         let mut corr_a = -direction * correction_magnitude * self_share;
