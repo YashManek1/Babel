@@ -67,6 +67,34 @@ const MAX_VELOCITY: f32 = 25.0;
 /// upright-correction. Prevents blocks from sleeping on steep slopes.
 const FLAT_CONTACT_Y_THRESHOLD: f32 = 0.98;
 
+// =============================================================================
+// BUG FIX: ANGULAR SETTLING THRESHOLD
+// =====================================
+//
+// THE OLD BUG (Issue 1 — Steel-beside-Steel Tipping):
+//   The angular settling code ran whenever contact_count > 0 — meaning it also
+//   ran when a block was being pushed SIDEWAYS by a horizontal collision. For
+//   example, two steel blocks side-by-side produce a contact normal of Vec3::X
+//   or Vec3::Z. The old code computed:
+//     axis = Vec3::Y.cross(contact_normal_accum_normalized)
+//     target_rot = Quat::from_axis_angle(axis, angle_between(Y, contact_normal))
+//   When contact_normal ≈ Vec3::X, angle_between(Y, X) = 90°. Slerping 25%
+//   toward a 90° rotation every frame = the block tilts by ~22.5° per frame
+//   until it falls over sideways. This is the tipping/spinning in the image.
+//
+// THE FIX:
+//   Add ANGULAR_SETTLE_MIN_Y_THRESHOLD: only apply angular settling when the
+//   average contact normal points "mostly upward" (Y component > threshold).
+//   This means settling only happens when the block is resting ON a surface,
+//   not when it's being pushed FROM THE SIDE. Horizontal collisions (walls,
+//   side-by-side blocks) will no longer cause tipping.
+//
+//   Value: 0.5 = cos(60°). Any normal with Y > 0.5 is "more up than sideways."
+//   This is intentionally lower than FLAT_CONTACT_Y_THRESHOLD (0.98) to allow
+//   settling on mild slopes while still blocking sideways-contact triggers.
+// =============================================================================
+const ANGULAR_SETTLE_MIN_Y_THRESHOLD: f32 = 0.5;
+
 /// How aggressively a tilted block rotates back to upright when resting on
 /// a flat surface. 1.0 = instant snap, 0.0 = never corrects.
 /// 0.2 gives a smooth, realistic settle.
@@ -277,6 +305,7 @@ struct Contact {
 #[derive(Clone)]
 pub struct BodySnapshot {
     pub predicted_position: Vec3,
+    pub previous_position: Vec3,
     pub inv_mass: f32,
     pub shape: ShapeType,
     pub sphere_radius: f32,
@@ -511,6 +540,8 @@ fn compute_aabb_aabb_contact(
 //
 // Push along the axis with the SMALLEST penetration.
 fn compute_cube_wedge_contact(cube_pos: Vec3, wedge_pos: Vec3) -> Option<Contact> {
+    const SAT_AXIS_EPS: f32 = 1e-4;
+
     // Vector from wedge center to cube center (in wedge-local space, since wedge is axis-aligned)
     let local = cube_pos - wedge_pos;
 
@@ -571,9 +602,11 @@ fn compute_cube_wedge_contact(cube_pos: Vec3, wedge_pos: Vec3) -> Option<Contact
     // ── Pick minimum penetration axis ─────────────────────────────────────────
     // SAT: the collision normal is the axis with the SMALLEST overlap.
     // This is the "minimum translation distance" — the shortest path out.
-    let min_pen = ix.min(iz).min(i_slope);
-
-    let (normal, penetration) = if min_pen == i_slope {
+    //
+    // LEARNING: Floating-point ties between slope and side axes are common near
+    // wedge edges. Prefer the slope axis when penetrations are nearly equal so
+    // cubes don't jitter between side-wall pushes and slope pushes frame-to-frame.
+    let (normal, penetration) = if i_slope <= ix + SAT_AXIS_EPS && i_slope <= iz + SAT_AXIS_EPS {
         // Cube hit the slope face — push it perpendicular to the slope
         // The sign of cube_dist_along_slope tells us which side of the slope we're on.
         // If cube_dist_along_slope > 0, the cube is on the "outside" (above slope) — push outward.
@@ -584,12 +617,14 @@ fn compute_cube_wedge_contact(cube_pos: Vec3, wedge_pos: Vec3) -> Option<Contact
             -1.0
         };
         (slope_n * sign, i_slope)
-    } else if min_pen == ix {
+    } else if ix <= iz {
         // Cube hit the X-axis side wall of the wedge
-        (Vec3::X * local.x.signum(), ix)
+        let sign = if local.x >= 0.0 { 1.0 } else { -1.0 };
+        (Vec3::X * sign, ix)
     } else {
         // Cube hit the Z-axis front/back wall of the wedge
-        (Vec3::Z * local.z.signum(), iz)
+        let sign = if local.z >= 0.0 { 1.0 } else { -1.0 };
+        (Vec3::Z * sign, iz)
     };
 
     Some(Contact {
@@ -655,16 +690,43 @@ fn compute_sphere_aabb_contact(
         return None;
     }
     let distance = dist_sq.sqrt();
-    // If sphere center is INSIDE the box, delta is zero — push upward
-    let normal = if distance > 1e-6 {
-        delta / distance
+
+    // LEARNING: If the sphere center is inside the AABB, delta is zero and a
+    // fixed Vec3::Y normal creates visible hover/gap artifacts on slopes/edges.
+    // Pick the nearest box face normal and add inside-depth to penetration.
+    let (normal, contact_point, penetration) = if distance > 1e-6 {
+        (
+            delta / distance,
+            box_pos + closest,
+            sphere_radius - distance,
+        )
     } else {
-        Vec3::Y
+        let dx = box_half.x - local.x.abs();
+        let dy = box_half.y - local.y.abs();
+        let dz = box_half.z - local.z.abs();
+
+        if dx <= dy && dx <= dz {
+            let sign = if local.x >= 0.0 { 1.0 } else { -1.0 };
+            let n = Vec3::new(sign, 0.0, 0.0);
+            let cp_local = Vec3::new(sign * box_half.x, local.y, local.z);
+            (n, box_pos + cp_local, sphere_radius + dx)
+        } else if dy <= dz {
+            let sign = if local.y >= 0.0 { 1.0 } else { -1.0 };
+            let n = Vec3::new(0.0, sign, 0.0);
+            let cp_local = Vec3::new(local.x, sign * box_half.y, local.z);
+            (n, box_pos + cp_local, sphere_radius + dy)
+        } else {
+            let sign = if local.z >= 0.0 { 1.0 } else { -1.0 };
+            let n = Vec3::new(0.0, 0.0, sign);
+            let cp_local = Vec3::new(local.x, local.y, sign * box_half.z);
+            (n, box_pos + cp_local, sphere_radius + dz)
+        }
     };
+
     Some(Contact {
         normal,
-        penetration: sphere_radius - distance,
-        contact_point: box_pos + closest,
+        penetration,
+        contact_point,
     })
 }
 
@@ -829,6 +891,7 @@ pub fn solve_constraints_system(
             // Reserve slots in all arrays (uninitialized for now)
             buffers.snapshots.push(BodySnapshot {
                 predicted_position: Vec3::ZERO,
+                previous_position: Vec3::ZERO,
                 inv_mass: 0.0,
                 shape: ShapeType::Cube,
                 sphere_radius: 0.0,
@@ -846,6 +909,7 @@ pub fn solve_constraints_system(
             if let Some(&idx) = buffers.entity_to_index.get(&entity) {
                 buffers.snapshots[idx] = BodySnapshot {
                     predicted_position: voxel.predicted_position,
+                    previous_position: voxel.position,
                     inv_mass: voxel.inv_mass,
                     shape: voxel.shape.clone(),
                     sphere_radius: voxel.sphere_radius,
@@ -942,19 +1006,21 @@ pub fn solve_constraints_system(
                 // calling .cloned() on the entire BodySnapshot struct.
                 // Avoids copying the full struct (Vec3 + f32 + ShapeType + f32)
                 // on every one of the ~14,000 neighbor checks per frame.
-                let (self_pos, self_inv_mass, self_shape, self_radius) = {
+                let (self_pos, self_prev_pos, self_inv_mass, self_shape, self_radius) = {
                     let s = &buffers.snapshots[self_idx];
                     (
                         s.predicted_position,
+                        s.previous_position,
                         s.inv_mass,
                         s.shape.clone(),
                         s.sphere_radius,
                     )
                 };
-                let (other_pos, other_inv_mass, other_shape, other_radius) = {
+                let (other_pos, other_prev_pos, other_inv_mass, other_shape, other_radius) = {
                     let s = &buffers.snapshots[other_idx];
                     (
                         s.predicted_position,
+                        s.previous_position,
                         s.inv_mass,
                         s.shape.clone(),
                         s.sphere_radius,
@@ -997,12 +1063,14 @@ pub fn solve_constraints_system(
 
                 if self_is_wedge ^ other_is_wedge {
                     if self_is_wedge {
-                        if self_inv_mass < 0.001 && self_pos.y < 1.0 {
+                        let self_speed = (self_pos - self_prev_pos).length() / DT;
+                        if self_inv_mass < 0.001 && self_speed < WEDGE_SETTLED_SPEED_THRESHOLD {
                             self_share = self_share.min(WEDGE_SETTLED_SHARE_CAP);
                             other_share = 1.0 - self_share;
                         }
                     } else {
-                        if other_inv_mass < 0.001 && other_pos.y < 1.0 {
+                        let other_speed = (other_pos - other_prev_pos).length() / DT;
+                        if other_inv_mass < 0.001 && other_speed < WEDGE_SETTLED_SPEED_THRESHOLD {
                             other_share = other_share.min(WEDGE_SETTLED_SHARE_CAP);
                             self_share = 1.0 - other_share;
                         }
@@ -1090,6 +1158,39 @@ pub fn solve_constraints_system(
 //   - Sleep: zeros velocity below the sleep threshold to stop micro-jitter
 //   - Angular settling: lerps rotation toward upright when resting flat
 //
+// =============================================================================
+// BUG FIX: ANGULAR SETTLING GATING (Issue 1 — Steel-beside-Steel Tipping)
+// =========================================================================
+//
+// THE OLD BUG:
+//   Angular settling ran whenever `contact_count > 0`. This includes sideways
+//   contacts between adjacent blocks (e.g., two steel blocks side by side
+//   produce contact normal Vec3::X). The code computed:
+//
+//     axis = Vec3::Y.cross(Vec3::X)  = Vec3::Z (or Vec3::NEG_Z)
+//     angle = Vec3::Y.angle_between(Vec3::X) = 90°
+//     target_rot = Quat::from_axis_angle(Vec3::Z, 90°)
+//     voxel.rotation = slerp(current, target_rot, 0.25)
+//
+//   Result: the block tilts 22.5° toward sideways every frame while in side
+//   contact. Blocks topple over or spin uncontrollably. This is the "tipping"
+//   and "weird rotation" visible in the screenshot (rightmost cluster).
+//
+// THE FIX (applied inside update_velocities_system below):
+//   The `support_normal` selection already guarded against downward normals
+//   with `if avg_normal.y > 0.0`. We additionally require that the support
+//   normal's Y component exceeds ANGULAR_SETTLE_MIN_Y_THRESHOLD (0.5).
+//
+//   This ensures angular settling only fires when the block is being pushed
+//   "mostly upward" — i.e., resting ON a surface, not being nudged sideways.
+//   Side contacts (Y ≈ 0) and top-push contacts (Y < 0) are excluded.
+//
+// WHY 0.5 SPECIFICALLY:
+//   cos(60°) = 0.5. Any surface normal tilted more than 60° from vertical
+//   is "more horizontal than vertical." We want settling on gentle slopes
+//   (up to 60° from horizontal = 30° from vertical, Y > 0.5) but NOT on
+//   walls or side faces. 0.5 is the natural midpoint for this classification.
+// =============================================================================
 pub fn update_velocities_system(mut query: Query<&mut Voxel>) {
     for mut voxel in query.iter_mut() {
         if voxel.inv_mass == 0.0 {
@@ -1139,18 +1240,16 @@ pub fn update_velocities_system(mut query: Query<&mut Voxel>) {
             // LEARNING: On a slope, DON'T trust the solver-derived velocity —
             // it contains a huge artificial Z/X push from the correction step.
             // Instead, take the pre-contact gravity velocity and project it
-            // onto the slope surface (remove the normal component so we don't
-            // penetrate, keep the tangential component = natural sliding).
-            let raw = (voxel.predicted_position - voxel.position) / DT;
-            // Project raw velocity onto the slope surface plane:
+            // onto the slope surface plane:
             // Remove any component ALONG the outward normal (prevents embedding)
             // Keep only the tangential (sliding) component.
+            let raw = (voxel.predicted_position - voxel.position) / DT;
             let v_normal_mag = raw.dot(contact_normal_now);
             let v_tangential = raw - contact_normal_now * v_normal_mag;
-            // The tangential speed should be bounded by what gravity alone can give
-            // over one frame: v = g * dt * slope_tangential_factor ≈ 0.163 m/s
-            // We allow up to 10× that for accumulated slide velocity.
-            v_tangential.clamp_length_max(2.0)
+            // LEARNING: Do not hard-clamp slope tangential speed to a tiny
+            // constant. It erases physically valid downhill momentum and creates
+            // sticky wedge behavior. Global MAX_VELOCITY already provides safety.
+            v_tangential
         } else {
             (voxel.predicted_position - voxel.position) / DT
         };
@@ -1169,17 +1268,29 @@ pub fn update_velocities_system(mut query: Query<&mut Voxel>) {
                 (voxel.contact_normal_accum / voxel.contact_count as f32).normalize_or_zero();
 
             if avg_normal != Vec3::ZERO {
-                // ── Angular settling: rotate block to align with contact surface ──
+                // =================================================================
+                // BUG FIX: ANGULAR SETTLING GATING (Issue 1)
+                // -------------------------------------------
+                // Only compute angular settling when the contact normal points
+                // sufficiently upward. This prevents side contacts (steel-beside-
+                // steel, wall contacts, etc.) from triggering rotation toward a
+                // 90° tilted orientation, which caused the tipping/spinning bug.
                 //
-                // LEARNING: Quaternion slerp (Spherical Linear intERPolation)
-                // smoothly rotates between two orientations. We compute the rotation
-                // that would bring Vec3::Y (the block's "up") to align with avg_normal
-                // (the surface normal). Slerping 20% of the way each frame gives a
-                // smooth, realistic settle without snapping.
-                // Only use UPWARD-facing support normals for orientation.
-                // Downward normals can happen from an object above us and should
-                // never drive "upright settle".
-                let support_normal = if avg_normal.y > 0.0 {
+                // BEFORE: `support_normal = if avg_normal.y > 0.0 { avg_normal } ...`
+                //   → Any upward-facing normal triggered settling, including
+                //     near-horizontal normals from side contacts (Y ≈ 0.01).
+                //
+                // AFTER: additionally require avg_normal.y >= ANGULAR_SETTLE_MIN_Y_THRESHOLD
+                //   → Only normals pointing at least 60° from horizontal trigger settling.
+                //   → Side contacts (avg_normal.y ≈ 0) are cleanly excluded.
+                // =================================================================
+                let lateral_dominance = avg_normal.x.abs().max(avg_normal.z.abs());
+                let near_rest_for_settle = voxel.velocity.length() <= WEDGE_SETTLED_SPEED_THRESHOLD;
+
+                let support_normal = if avg_normal.y >= ANGULAR_SETTLE_MIN_Y_THRESHOLD
+                    && avg_normal.y > lateral_dominance
+                    && near_rest_for_settle
+                {
                     avg_normal
                 } else {
                     Vec3::ZERO
