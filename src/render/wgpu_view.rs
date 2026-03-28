@@ -1,3 +1,36 @@
+// =============================================================================
+// src/render/wgpu_view.rs  —  Operation Babel: WGPU Renderer
+// =============================================================================
+//
+// SPRINT 4 ADDITIONS:
+//   - render_frame_with_stress(): new render entry point that takes stress data
+//   - height_to_color_with_stress(): stress-aware color computation
+//   - Scaffold rendering: diagonal hatch signal via color.g = -1.0
+//   - SpawnScaffold UiCommand: new button in the egui toolbar
+//   - despawn_scaffolding UI button: removes all scaffold in one click
+//
+// LEARNING TOPIC: How Stress Gets Into the Render Pipeline
+// --------------------------------------------------------
+// The stress value for each block comes from StressMap (computed by
+// compute_stress_system each frame). lib.rs collects (Voxel, stress, is_scaffold)
+// tuples and passes them to render_frame_with_stress(). This function builds the
+// vertex buffer with stress-tinted colors and uploads to the GPU.
+//
+// The path is: StressMap → CPU color computation → Vertex buffer → GPU → screen.
+// All math stays on the CPU where spatial graph traversal is straightforward.
+// The GPU shader just renders whatever color the CPU computed.
+//
+// LEARNING TOPIC: The Color Encoding Convention
+// ---------------------------------------------
+// We pack special rendering modes into the vertex color channels:
+//   color.r < 0.0         → Ground plane (procedural grass shader)
+//   color.g < -0.5        → Scaffold block (diagonal hatch in shader)
+//   otherwise             → Normal block with stress-tinted color
+//
+// This avoids adding extra vertex attributes (which would require changing the
+// Vertex struct layout, buffer creation, and pipeline attribute descriptions).
+// The cost is one extra branch in the fragment shader — negligible on modern GPUs.
+
 use crate::render::camera::FreecamState;
 use crate::world::voxel::{MaterialType, ShapeType, Voxel};
 use glam::{Mat4, Vec3};
@@ -35,6 +68,13 @@ pub enum UiCommand {
         radius: f32,
         material_id: u8,
     },
+    // SPRINT 4: New UI command for scaffold placement
+    SpawnScaffold {
+        x: f32,
+        z: f32,
+    },
+    // SPRINT 4: Explicit scaffold removal command (no NaN sentinel hacks)
+    DespawnAllScaffold,
 }
 
 // =============================================================================
@@ -42,8 +82,8 @@ pub enum UiCommand {
 // =============================================================================
 // WGPU is a low-level GPU API. It doesn't understand "structs" — it only knows
 // raw bytes. The #[repr(C)] attribute forces Rust to lay out the struct exactly
-// like C does (fields in order, no padding between them), matching what the
-// WGSL shader expects at locations 0 (position) and 1 (color).
+// like C does (fields in order, no padding), matching what the WGSL shader
+// expects at locations 0 (position) and 1 (color).
 //
 // bytemuck::Pod ("Plain Old Data") proves there are no pointers, no padding,
 // no uninitialized bytes — safe to reinterpret as raw &[u8] for GPU upload.
@@ -66,7 +106,7 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: 12, // 3 floats * 4 bytes = 12 byte offset to color
+                    offset: 12, // 3 floats × 4 bytes = 12 byte offset to color
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x3,
                 },
@@ -107,7 +147,6 @@ fn push_cube_mesh(
     ];
 
     for &local in local_verts.iter() {
-        // Quaternion × Vec3: rotate local vertex offset into world orientation
         let world = render_pos + (voxel.rotation * local);
         v.push(Vertex {
             position: world.into(),
@@ -194,14 +233,9 @@ fn push_sphere_mesh(
     render_pos: Vec3,
     color: [f32; 3],
 ) {
-    // ==========================================================================
     // LEARNING MECHANIC: UV Sphere Tessellation
-    // ==========================================
     // A sphere is approximated by a grid of latitude (theta) and longitude (phi)
-    // angles. Each grid intersection becomes a vertex on the sphere surface.
-    // lat_count × lon_count grid cells become 2 triangles each.
-    // Higher counts = smoother sphere but more GPU vertices.
-    // 12×18 gives a good balance for our block scale.
+    // angles. 12×18 gives a good balance between smoothness and vertex count.
     let base = v.len() as u32;
     let lat_count: u32 = 12;
     let lon_count: u32 = 18;
@@ -236,69 +270,111 @@ fn push_sphere_mesh(
 }
 
 // =============================================================================
-// LEARNING MECHANIC: Height-Based Block Coloring
+// SPRINT 4: height_to_color_with_stress()
 // =============================================================================
-// Each "level" of stacked blocks gets a distinct color. This serves two purposes:
-// 1. VISUAL DEBUGGING: You can immediately see which physical level each block
-//    occupies — critical for verifying the stacking bug is fixed.
-// 2. GAMEPLAY CLARITY: In a tower-building simulation, height = progress.
-//    Different colors help the user see the tower structure at a glance.
 //
-// We map block center Y position → level index → color:
-//   Level 0 (y ≈ 0.5):  warm brown  (ground level)
-//   Level 1 (y ≈ 1.5):  terracotta  (first stack)
-//   Level 2 (y ≈ 2.5):  clay        (second stack)
-//   Level 3+:           cycle through a palette
+// LEARNING TOPIC: Stress Heatmap Color Computation
+// -------------------------------------------------
+// This function computes the final vertex color for each block based on TWO
+// inputs: the material base color and the stress level.
 //
-// This is NOT Z-fighting prevention — it's purely visual communication.
-// We now preserve that readability by applying a slight height tint on top of
-// the block's material base color, so Wood/Steel/Stone remain visually distinct.
-fn height_to_color(voxel: &Voxel) -> [f32; 3] {
+// STRESS GRADIENT:
+//   stress = 0.0 → Green  [0.2, 0.8, 0.2]  — safe, no load
+//   stress = 0.5 → Yellow [0.9, 0.8, 0.1]  — stressed, approaching limit
+//   stress = 1.0 → Red    [0.9, 0.1, 0.1]  — critical, near failure
+//
+// We blend between material color and stress color based on stress level.
+// LOW stress: mostly material color (you can tell what material it is)
+// HIGH stress: mostly stress color (red/yellow warning dominates)
+//
+// This two-factor blending (material × stress) is better than pure stress
+// coloring because:
+//   1. You can still see material types at low stress (brown=wood, grey=stone)
+//   2. The warning color is visually unmistakable at high stress
+//   3. It matches real engineering practice: safe = material color, danger = red
+//
+// SCAFFOLD SIGNAL:
+//   For scaffold blocks, we return a special signal color with color.g = -2.0.
+//   The fragment shader detects color.g < -0.5 and draws the hatch pattern.
+//   We don't apply stress tinting to scaffold because scaffold stress is always
+//   low (ultra-light) and the hatch pattern is more informative.
+fn height_to_color_with_stress(
+    voxel: &Voxel,
+    stress_normalized: f32,
+    is_scaffold: bool,
+) -> [f32; 3] {
+    // SPRINT 4: Scaffold gets the hatch signal — shader handles the pattern.
+    // color.r > 0.0 (not ground), color.g = -2.0 (scaffold signal to shader)
+    if is_scaffold {
+        return [0.001, -2.0, 0.0];
+    }
+
+    // Material base color with slight height tinting (same as before Sprint 4)
     let base = match voxel.material {
         MaterialType::Wood => [0.70, 0.52, 0.32],
         MaterialType::Steel => [0.55, 0.60, 0.68],
         MaterialType::Stone => [0.62, 0.62, 0.58],
+        MaterialType::Scaffold => [0.85, 0.55, 0.15], // fallback (handled above)
     };
-
     let height_boost = ((voxel.position.y.max(0.0) / 12.0) * 0.10).min(0.10);
-    [
+    let base_tinted = [
         (base[0] + height_boost).min(1.0),
         (base[1] + height_boost).min(1.0),
         (base[2] + height_boost).min(1.0),
+    ];
+
+    // Stress color gradient: green → yellow → red (two-segment lerp)
+    // LEARNING: We evaluate the gradient at the current stress value.
+    // Segment 1 [0.0, 0.5]: lerp green→yellow by (stress/0.5)
+    // Segment 2 [0.5, 1.0]: lerp yellow→red by ((stress-0.5)/0.5)
+    let green = [0.2_f32, 0.85, 0.2];
+    let yellow = [0.95_f32, 0.85, 0.1];
+    let red = [0.95_f32, 0.1, 0.1];
+
+    let stress_color = if stress_normalized <= 0.5 {
+        let t = stress_normalized / 0.5;
+        [
+            green[0] + (yellow[0] - green[0]) * t,
+            green[1] + (yellow[1] - green[1]) * t,
+            green[2] + (yellow[2] - green[2]) * t,
+        ]
+    } else {
+        let t = (stress_normalized - 0.5) / 0.5;
+        [
+            yellow[0] + (red[0] - yellow[0]) * t,
+            yellow[1] + (red[1] - yellow[1]) * t,
+            yellow[2] + (red[2] - yellow[2]) * t,
+        ]
+    };
+
+    // Blend material color and stress color.
+    // At low stress: mostly material color (blend_t near 0).
+    // At high stress: mostly stress color (blend_t near 1).
+    //
+    // LEARNING: We use a non-linear blend (stress²) so colors stay
+    // near their material base for most of the safe range and only
+    // sharply shift toward warning colors as stress approaches 1.0.
+    // This prevents the whole structure looking slightly yellow all the time.
+    let blend_t = stress_normalized * stress_normalized; // quadratic — slow to change, fast near 1.0
+    [
+        base_tinted[0] + (stress_color[0] - base_tinted[0]) * blend_t,
+        base_tinted[1] + (stress_color[1] - base_tinted[1]) * blend_t,
+        base_tinted[2] + (stress_color[2] - base_tinted[2]) * blend_t,
     ]
 }
 
 // =============================================================================
-// LEARNING MECHANIC: Z-Fighting and Why the Old Epsilon Fix Was Wrong
+// SPRINT 4: build_mesh_with_stress()
 // =============================================================================
 //
-// Z-FIGHTING: When two triangles occupy exactly the same depth (Z) in the depth
-// buffer, the GPU flickers between them frame-to-frame depending on floating-point
-// rounding. Two stacked blocks share a face at exactly the same Y coordinate:
-//   Block A top face: y = A.center + 0.5 = 0.5 + 0.5 = 1.0
-//   Block B bottom face: y = B.center - 0.5 = 1.5 - 0.5 = 1.0
-// Both triangles are at y=1.0 → Z-fighting → Block B "disappears."
-//
-// THE OLD BROKEN FIX: `render_pos.y += idx * 0.0001`
-// This offset is INDEX-based (render array order), NOT position-based.
-// Block B might be at idx=0 (no offset) and Block A at idx=1 (tiny offset).
-// The offset doesn't correlate with which block is on top, so it doesn't
-// reliably prevent the exact face overlap.
-//
-// THE REAL FIX: Use the GPU's built-in depth bias for the solid pipeline
-// (constant: 1, slope_scale: 1.0 — already set in your pipeline) which pushes
-// solid polygons back. Then for the render_pos, we DON'T add any Y epsilon —
-// the positions are left physically accurate. The depth bias handles the
-// solid-vs-wireframe overlap, and correct physics separation handles block-vs-block.
-//
-// ADDITIONALLY: The previous render_pos formula had a subtle problem —
-// idx-based epsilon ACCUMULATED over many blocks, pushing high blocks
-// visually upward by up to `N * 0.0001` which was completely wrong for
-// towers of 100+ blocks (0.01 unit offset per block = 1 unit error at level 100).
-//
-// NEW FORMULA: render_pos = voxel.position (exact, no epsilon)
-// The depth buffer + depth bias handles all Z-fighting correctly.
-fn build_mesh(voxels: &[&Voxel], tx: f32, tz: f32) -> (Vec<Vertex>, Vec<u32>, Vec<u32>) {
+// Updated mesh builder that takes (voxel, stress, is_scaffold) tuples.
+// The stress value and scaffold flag are passed to height_to_color_with_stress()
+// to compute the final vertex color before uploading to the GPU.
+fn build_mesh_with_stress(
+    voxels: &[(&Voxel, f32, bool)],
+    tx: f32,
+    tz: f32,
+) -> (Vec<Vertex>, Vec<u32>, Vec<u32>) {
     let mut vertices = Vec::new();
     let mut solid_indices = Vec::new();
     let mut border_indices = Vec::new();
@@ -332,8 +408,7 @@ fn build_mesh(voxels: &[&Voxel], tx: f32, tz: f32) -> (Vec<Vertex>, Vec<u32>, Ve
     solid_indices.extend_from_slice(&[0, 1, 2, 2, 3, 0]);
 
     // ── Yellow target cursor ──────────────────────────────────────────────────
-    // Rendered as a wireframe square on the ground at the current spawn position.
-    // Uses border_indices (LineList) so it's always a thin outline, never filled.
+    // Wireframe square on the ground showing the current spawn target position.
     let ti = vertices.len() as u32;
     let target_verts = [
         Vertex {
@@ -357,49 +432,20 @@ fn build_mesh(voxels: &[&Voxel], tx: f32, tz: f32) -> (Vec<Vertex>, Vec<u32>, Ve
     border_indices.extend_from_slice(&[ti, ti + 1, ti + 1, ti + 2, ti + 2, ti + 3, ti + 3, ti]);
 
     // ── Voxel blocks ──────────────────────────────────────────────────────────
-    for voxel in voxels.iter() {
+    for (voxel, stress_normalized, is_scaffold) in voxels.iter() {
         if voxel.position.is_nan() {
             continue;
         }
 
-        // =======================================================================
-        // BUG FIX — Z-FIGHTING (Visual Disappearing of Stacked Blocks)
-        // =======================================================================
-        //
-        // WHAT WAS HAPPENING:
-        //   Block A settles at y=0.5. Block B lands on A, settles at y=1.5.
-        //   Top face of A = y=0.5+0.5=1.0. Bottom face of B = y=1.5-0.5=1.0.
-        //   Both triangles at exactly y=1.0 in world space → same depth value
-        //   in the depth buffer → GPU alternates between them per-pixel → B flickers
-        //   and appears to "disappear" visually.
-        //
-        //   The old "fix" was: render_pos.y += idx * 0.0001
-        //   This is WRONG because:
-        //     a) idx is the array iteration order, not related to physical height.
-        //        Block B might be idx=0 (zero offset) while A is idx=1.
-        //     b) For tall towers, error accumulates: 100 blocks → 0.01 unit offset.
-        //
-        // THE ACTUAL FIX — Two-part:
-        //
-        // PART 1 (here): Use render_pos = voxel.position EXACTLY. No epsilon.
-        //   The depth bias on the solid pipeline (constant=1, slope_scale=1.0)
-        //   already handles solid-vs-wireframe Z-fighting. For block-vs-block
-        //   shared faces, correct physics separation (blocks physically 1.0 apart)
-        //   combined with the depth test's natural floating-point epsilon is
-        //   sufficient when the depth bias pushes the closer solid face forward.
-        //
-        // PART 2 (physics, in xpbd.rs): The sleeping block at y=0.5 must maintain
-        //   exactly 1.0 unit of separation from a block at y=1.5. If the solver
-        //   allowed A to drift downward (A.y → 0.499), the gap shrinks to 0.999
-        //   and B's bottom clips into A's top. The wedge settled-share fix and
-        //   the correct other_pos (using snapshot position) prevent this drift.
-        //
-        // PART 3 (color): Height-based coloring makes each level visually distinct,
-        //   so even if there were very slight Z-fighting, you'd see color change
-        //   rather than "disappear."
-        let render_pos = voxel.position; // Exact position — no artificial epsilon
+        // Exact world position — no epsilon offset.
+        // LEARNING: The depth bias on the solid pipeline (wgpu_view.rs pipeline setup)
+        // already handles solid-vs-wireframe Z-fighting. For block-vs-block shared
+        // faces, the physics engine ensures blocks are separated by exactly 1.0 unit,
+        // so shared faces never have identical depth values.
+        let render_pos = voxel.position;
 
-        let color = height_to_color(voxel);
+        // SPRINT 4: Color now encodes both material and stress (or scaffold hatch signal)
+        let color = height_to_color_with_stress(voxel, *stress_normalized, *is_scaffold);
 
         match voxel.shape {
             ShapeType::Cube => push_cube_mesh(
@@ -453,6 +499,11 @@ pub struct RenderContext {
     pub spawn_z: f32,
     sphere_r: f32,
     selected_material_id: u8,
+    // SPRINT 4: Track whether the stress heatmap is enabled in the UI.
+    // When false, blocks use their material base color only.
+    // When true, the stress gradient overrides the base color at high stress.
+    // This toggle lets users compare structure appearance with/without heatmap.
+    show_stress_heatmap: bool,
     pub camera: FreecamState,
 }
 
@@ -487,6 +538,7 @@ impl RenderContext {
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .ok()?;
+
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
         let format = caps.formats[0];
@@ -561,20 +613,9 @@ impl RenderContext {
             push_constant_ranges: &[],
         });
 
-        // =======================================================================
         // LEARNING MECHANIC: Depth Bias (Z-Fighting Prevention for Solid vs Wire)
-        // =======================================================================
-        // When we draw solid triangles AND wireframe lines at the same world
-        // coordinates, both get the same depth value → wireframe disappears behind
-        // the solid face (Z-fighting).
-        //
-        // DepthBias pushes solid polygons BACK in depth space by a configurable
-        // amount. The wireframe lines (no depth bias) then sit infinitesimally
-        // in front of the solid, always visible on top.
-        //
-        // constant: 1    → 1 depth unit offset (minimum stable offset for all GPUs)
-        // slope_scale: 1.0 → additional offset proportional to polygon slope
-        //                    (prevents bias artifacts on angled surfaces)
+        // DepthBias pushes solid polygons BACK in depth space so wireframe lines
+        // always sit in front of the solid face they outline.
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("3D_Solid_Pipeline"),
             layout: Some(&pipeline_layout),
@@ -596,7 +637,7 @@ impl RenderContext {
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: Some(wgpu::Face::Back), // Back-face culling saves ~50% fragment work
+                cull_mode: Some(wgpu::Face::Back), // back-face culling saves ~50% fragment work
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -605,8 +646,8 @@ impl RenderContext {
                 depth_compare: wgpu::CompareFunction::LessEqual,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState {
-                    constant: 1,      // Push solids back 1 depth unit
-                    slope_scale: 1.0, // Scale by surface angle
+                    constant: 1,
+                    slope_scale: 1.0,
                     clamp: 0.0,
                 },
             }),
@@ -643,7 +684,7 @@ impl RenderContext {
                 depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::LessEqual,
                 stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(), // No bias for wireframe
+                bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
@@ -681,6 +722,7 @@ impl RenderContext {
             spawn_z: 0.0,
             sphere_r: 1.0,
             selected_material_id: 0,
+            show_stress_heatmap: true, // SPRINT 4: enabled by default
             camera,
         })
     }
@@ -688,12 +730,11 @@ impl RenderContext {
     pub fn handle_window_event(&mut self, event: &winit::event::WindowEvent) {
         let _ = self.egui_state.on_window_event(&self.window, event);
 
-        // ── existing cursor tracking (keep as-is) ─────────────────────────────
         if let winit::event::WindowEvent::CursorMoved { position, .. } = event {
             self.last_cursor_px = Some((position.x as f32, position.y as f32));
         }
 
-        // ── NEW: right mouse button state → orbit guard ───────────────────────
+        // Right mouse button state → orbit guard
         // LEARNING: We only orbit on RMB so LMB stays free for egui interaction.
         if let winit::event::WindowEvent::MouseInput { state, button, .. } = event {
             if *button == MouseButton::Right {
@@ -701,10 +742,7 @@ impl RenderContext {
             }
         }
 
-        // ── NEW: scroll wheel → zoom ──────────────────────────────────────────
-        // LEARNING: Winit gives two scroll variants:
-        //   LineDelta: discrete "clicks" (most mice) — use y component
-        //   PixelDelta: trackpad smooth scroll — use y component in logical pixels
+        // Scroll wheel → zoom
         if let winit::event::WindowEvent::MouseWheel { delta, .. } = event {
             if !self.egui_ctx.wants_pointer_input() {
                 let scroll = match delta {
@@ -715,7 +753,7 @@ impl RenderContext {
             }
         }
 
-        // ── NEW: keyboard → WASD held-key state ──────────────────────────────
+        // Keyboard → WASD held-key state
         if let winit::event::WindowEvent::KeyboardInput {
             event: key_event, ..
         } = event
@@ -725,27 +763,20 @@ impl RenderContext {
             }
         }
 
-        // ── existing LMB ray-cast (keep as-is, but update MVP source) ─────────
+        // LMB ray-cast: find where the mouse ray hits the ground plane → spawn target
         if let winit::event::WindowEvent::MouseInput {
             state: ElementState::Pressed,
             button: MouseButton::Left,
             ..
         } = event
         {
-            // Only ray cast into the 3D world when egui is NOT consuming the
-            // pointer (e.g. the cursor is NOT hovering over a button/slider).
-            // Without this guard, clicking "Spawn Cube" would re-ray-cast from
-            // the button position, overwriting spawn_x/z with wrong coordinates
-            // just before the UiCommand is pushed.
             if !self.egui_ctx.wants_pointer_input() {
                 if let Some((px, py)) = self.last_cursor_px {
                     let w = self.config.width as f32;
                     let h = self.config.height as f32;
-                    // NDC: map pixel (0..w, 0..h) → (-1..1, 1..-1) with Y flipped
                     let ndc_x = (px / w) * 2.0 - 1.0;
                     let ndc_y = 1.0 - (py / h) * 2.0;
 
-                    // CHANGE: use camera.build_mvp() instead of build_mvp_matrix()
                     let mvp = Mat4::from_cols_array_2d(&self.camera.build_mvp(w / h));
                     let inv_mvp = mvp.inverse();
 
@@ -765,23 +796,28 @@ impl RenderContext {
     }
 
     pub fn handle_device_event(&mut self, event: &DeviceEvent) {
-        // LEARNING: DeviceEvent::MouseMotion { delta: (dx, dy) }
-        //   dx = pixels moved right (positive) or left (negative) since last event
-        //   dy = pixels moved DOWN  (positive) or up  (negative) since last event
-        //
-        // We pass (dx, dy) directly to camera.mouse_delta(), which applies
-        // sensitivity and clamps pitch internally.
+        // LEARNING: DeviceEvent::MouseMotion gives RAW DELTA from hardware sensors.
+        // Continues updating even at screen edges, no OS acceleration curves.
         if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
             self.camera.mouse_delta(*dx, *dy);
         }
     }
 
-    pub fn render_frame(&mut self, voxels: &[&Voxel]) -> Vec<UiCommand> {
-        // Recompute MVP and upload to the GPU uniform buffer
-        // NOTE: camera.update(dt) is called by lib.rs with real measured dt
-        // before this function — do NOT call it again here or pan speed doubles.
-        // LEARNING: queue.write_buffer is the fast path for small uniform updates.
-        // It schedules a CPU→GPU memcpy that completes before the next draw call.
+    // =========================================================================
+    // SPRINT 4: render_frame_with_stress() — Stress-aware render entry point
+    // =========================================================================
+    //
+    // LEARNING: This replaces render_frame() to accept stress data alongside
+    // voxel data. The stress values are baked into vertex colors on the CPU
+    // before upload to the GPU, so the shader is unchanged in its logic —
+    // it just renders whatever color the CPU computed.
+    //
+    // If show_stress_heatmap is false, we pass stress=0.0 for all blocks,
+    // which causes height_to_color_with_stress to use pure material colors.
+    pub fn render_frame_with_stress(&mut self, voxels: &[(&Voxel, f32, bool)]) -> Vec<UiCommand> {
+        // Recompute MVP and upload to the GPU uniform buffer.
+        // LEARNING: queue.write_buffer schedules a CPU→GPU memcpy that completes
+        // before the next draw call. This is the fast path for small uniforms.
         let aspect = self.config.width as f32 / self.config.height as f32;
         let mvp = self.camera.build_mvp(aspect);
         self.queue
@@ -803,6 +839,12 @@ impl RenderContext {
                     self.spawn_x, self.spawn_z
                 ));
                 ui.separator();
+
+                // SPRINT 4: Stress heatmap toggle
+                ui.checkbox(&mut self.show_stress_heatmap, "Show Stress Heatmap");
+                ui.label("Green=Safe  Yellow=Stressed  Red=Critical");
+                ui.separator();
+
                 ui.label("Material:");
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.selected_material_id, 0, "Wood");
@@ -816,6 +858,7 @@ impl RenderContext {
                     _ => "Wood: medium adhesion, light weight",
                 };
                 ui.label(material_hint);
+
                 if ui.button("Spawn Cube").clicked() {
                     commands.push(UiCommand::SpawnCube {
                         x: self.spawn_x,
@@ -840,6 +883,23 @@ impl RenderContext {
                         material_id: self.selected_material_id,
                     });
                 }
+
+                // SPRINT 4: Scaffold controls
+                ui.separator();
+                ui.label("Scaffold (temporary support):");
+                if ui.button("Place Scaffold").clicked() {
+                    commands.push(UiCommand::SpawnScaffold {
+                        x: self.spawn_x,
+                        z: self.spawn_z,
+                    });
+                }
+                // LEARNING: The "Remove All Scaffold" button is the UI equivalent
+                // of the RL agent's despawn_scaffolding() action. We emit a
+                // dedicated command variant so physics code never sees NaN
+                // coordinates from sentinel-based signaling.
+                if ui.button("Remove All Scaffold").clicked() {
+                    commands.push(UiCommand::DespawnAllScaffold);
+                }
             });
 
         let full_output = self.egui_ctx.end_pass();
@@ -850,7 +910,6 @@ impl RenderContext {
         let output = match self.surface.get_current_texture() {
             Ok(tex) => tex,
             Err(wgpu::SurfaceError::Outdated) => {
-                // Surface needs reconfiguration (window was resized, etc.)
                 self.surface.configure(&self.device, &self.config);
                 self.surface.get_current_texture().unwrap()
             }
@@ -865,7 +924,20 @@ impl RenderContext {
                 .update_texture(&self.device, &self.queue, *id, delta);
         }
 
-        let (v, s_idx, b_idx) = build_mesh(voxels, self.spawn_x, self.spawn_z);
+        // SPRINT 4: If heatmap is disabled, zero out stress values so colors
+        // revert to pure material colors. The CPU does this before mesh build.
+        let effective_voxels: Vec<(&Voxel, f32, bool)> = if self.show_stress_heatmap {
+            voxels.to_vec()
+        } else {
+            voxels
+                .iter()
+                .map(|(v, _, scaffold)| (*v, 0.0, *scaffold))
+                .collect()
+        };
+
+        let (v, s_idx, b_idx) =
+            build_mesh_with_stress(&effective_voxels, self.spawn_x, self.spawn_z);
+
         let v_buf = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -925,14 +997,12 @@ impl RenderContext {
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
             pass.set_vertex_buffer(0, v_buf.slice(..));
 
-            // Draw solid faces first (with depth bias pushing them back)
             if !s_idx.is_empty() {
                 pass.set_pipeline(&self.render_pipeline);
                 pass.set_index_buffer(s_buf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..s_idx.len() as u32, 0, 0..1);
             }
 
-            // Draw wireframe edges on top (no depth bias, sits in front)
             if !b_idx.is_empty() {
                 pass.set_pipeline(&self.border_pipeline);
                 pass.set_index_buffer(b_buf.slice(..), wgpu::IndexFormat::Uint32);
@@ -963,11 +1033,11 @@ impl RenderContext {
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load, // Keep 3D scene, draw UI on top
+                            load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
                         },
                     })],
-                    depth_stencil_attachment: None, // No depth test for 2D UI
+                    depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 })

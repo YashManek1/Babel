@@ -679,8 +679,22 @@ pub fn register_new_bonds_system(
     grid: Res<SpatialGrid>,
     query: Query<(Entity, &Voxel)>,
     mut bonds: ResMut<MortarBonds>,
+    mut registration_tick: Local<u32>,
 ) {
     use std::collections::{HashMap, HashSet};
+
+    *registration_tick = registration_tick.wrapping_add(1);
+    let dynamic_count = query.iter().filter(|(_, v)| v.inv_mass > 0.0).count();
+    let interval = if dynamic_count >= 400 {
+        4
+    } else if dynamic_count >= 200 {
+        2
+    } else {
+        1
+    };
+    if *registration_tick % interval != 0 {
+        return;
+    }
 
     // Snapshot adhesion/positions so neighbor lookups don't need random query access.
     let mut adhesion_by_entity: HashMap<Entity, f32> = HashMap::with_capacity(query.iter().len());

@@ -37,7 +37,7 @@ pub enum ShapeType {
 }
 
 // =============================================================================
-// SPRINT 3: MaterialType — Drives All Physics Properties
+// SPRINT 3 + 4: MaterialType — Drives All Physics Properties
 // =============================================================================
 //
 // LEARNING: This enum is the single source of truth for material behavior.
@@ -48,17 +48,24 @@ pub enum ShapeType {
 //
 // MATERIAL PHYSICS PROFILES:
 //
-//   Steel  — heavy (mass=800kg), high adhesion (can overhang 4+ blocks)
-//             High adhesion_strength means the mortar bond survives large
-//             breaking force checks. Good for bridges and arches.
+//   Steel    — heavy (mass=800kg), high adhesion (can overhang 4+ blocks)
+//              High adhesion_strength means the mortar bond survives large
+//              breaking force checks. Good for bridges and arches.
 //
-//   Wood   — light (mass=1kg), medium adhesion (overhang ~1 block)
-//             Easy to carry, moderate adhesion. Useful for scaffolding
-//             and light structures. Bond breaks under moderate load.
+//   Wood     — light (mass=1kg), medium adhesion (overhang ~1 block)
+//              Easy to carry, moderate adhesion. Useful for scaffolding
+//              and light structures. Bond breaks under moderate load.
 //
-//   Stone  — medium mass (mass=50kg), ZERO adhesion, high friction
-//             Stacks only — no side bonding at all. Best for foundations
-//             and ground-level walls where pure stacking is sufficient.
+//   Stone    — medium mass (mass=50kg), ZERO adhesion, high friction
+//              Stacks only — no side bonding at all. Best for foundations
+//              and ground-level walls where pure stacking is sufficient.
+//
+//   Scaffold — SPRINT 4: ultra-light (mass=0.5kg), medium adhesion, removable.
+//              Temporary support during arch/bridge construction. The agent
+//              (or player) places scaffold to hold an arch keystone in place
+//              while the mortar cures, then removes it via despawn_scaffolding().
+//              Intentionally weak (stress capacity = 5×) — turns red quickly
+//              as a visual signal that it must be removed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MaterialType {
     /// Heavy, rigid, high adhesion. Ideal for structural spans.
@@ -78,6 +85,44 @@ pub enum MaterialType {
     /// adhesion_strength = 0.0  (never bonds to side-neighbors)
     /// friction = 0.95
     Stone,
+
+    // =========================================================================
+    // SPRINT 4: Scaffold Material
+    // =========================================================================
+    //
+    // LEARNING TOPIC: Why Scaffolding Is Needed for Arch Construction
+    // ----------------------------------------------------------------
+    // An arch is structurally self-supporting ONCE COMPLETE — the stones push
+    // outward against the abutments (walls) and the keystone locks them in place.
+    // But during construction, the arch blocks on each side have NO keystone yet.
+    // Without something to hold them up, they fall inward before the arch closes.
+    //
+    // Real masons solved this with "centering" — a wooden frame supporting the
+    // arch stones until the keystone was placed. Once the keystone locked
+    // everything in compression, the centering was knocked out.
+    //
+    // In Operation Babel, the agent faces the same problem. To build:
+    //
+    //   Step 1: Place left arch block (held in place by scaffold below it)
+    //   Step 2: Place right arch block (held in place by scaffold below it)
+    //   Step 3: Place keystone at top — arch becomes self-supporting via mortar
+    //   Step 4: Remove scaffold → arch stands alone
+    //
+    // The reward function in Sprint 9 will give the agent a bonus for removing
+    // scaffold after successful arch construction (resource efficiency reward).
+    //
+    // PHYSICS PROPERTIES OF SCAFFOLD:
+    //   - Ultra-light (0.5 kg): doesn't add stress to the structure it supports
+    //   - Medium adhesion (2.0): bonds to arch blocks to hold them laterally
+    //   - High friction (0.8): grips the ground well
+    //   - is_scaffold flag: marks it for mass removal by despawn_scaffolding()
+    //   - Stress capacity = 5×: turns red quickly as a "remove me" warning
+    //
+    // inv_mass = 1/0.5 = 2.0
+    // adhesion_strength = 2.0  (same as wood — moderate lateral hold)
+    // friction = 0.8
+    /// Ultra-light temporary support. Place during arch construction, remove after.
+    Scaffold,
 }
 
 impl MaterialType {
@@ -92,6 +137,10 @@ impl MaterialType {
             MaterialType::Steel => 1.0 / 800.0, // 800 kg — very heavy
             MaterialType::Wood => 1.0,          // 1 kg   — reference mass
             MaterialType::Stone => 1.0 / 50.0,  // 50 kg  — medium
+            // SPRINT 4: Scaffold is ultra-light so it adds minimal load to the
+            // structure it supports. 0.5 kg means even a 10-block scaffold
+            // column adds only 5 kg to the base — negligible for stress purposes.
+            MaterialType::Scaffold => 1.0 / 0.5, // 0.5 kg — ultra-light
         }
     }
 
@@ -100,34 +149,26 @@ impl MaterialType {
         match self {
             MaterialType::Steel => 0.6,
             MaterialType::Wood => 0.7,
-            MaterialType::Stone => 0.95, // roughest — grips stack well
+            MaterialType::Stone => 0.95,   // roughest — grips stack well
+            MaterialType::Scaffold => 0.8, // good grip — scaffold must not slide
         }
     }
 
     /// Restitution (bounciness). Construction blocks should not bounce.
     pub fn restitution(self) -> f32 {
         match self {
-            MaterialType::Steel => 0.05, // tiny bounce (metal ring)
-            MaterialType::Wood => 0.0,   // dead stop
-            MaterialType::Stone => 0.02, // almost nothing
+            MaterialType::Steel => 0.05,   // tiny bounce (metal ring)
+            MaterialType::Wood => 0.0,     // dead stop
+            MaterialType::Stone => 0.02,   // almost nothing
+            MaterialType::Scaffold => 0.0, // scaffold should thud and stay put
         }
     }
 
     /// How strongly side-bonds resist breaking.
     ///
-    /// SPRINT 3 BUG FIX — Unit Clarification:
-    /// ----------------------------------------
-    /// adhesion_strength is a DIMENSIONLESS MULTIPLIER, not raw Newtons.
-    ///
+    /// adhesion_strength is a DIMENSIONLESS MULTIPLIER in world-unit-stretch space.
     /// In break_overloaded_bonds_system the survival check is:
-    ///   survives = adhesion_strength >= breaking_force_normalized
-    ///
-    /// where breaking_force_normalized = tension (bond stretch in world units,
-    /// typically 0.0 to ~0.5 before the bond breaks geometrically).
-    ///
-    /// So adhesion_strength = 2.0 means "survive up to 2 world-units of stretch."
-    /// Since tension rarely exceeds 0.5 under normal loads, Wood bonds are stable
-    /// for light structures, and Steel bonds are nearly unbreakable in practice.
+    ///   survives = adhesion_strength >= tension (bond stretch in world units)
     ///
     /// Stone returns 0.0 — it never forms side bonds at all.
     pub fn adhesion_strength(self) -> f32 {
@@ -135,6 +176,10 @@ impl MaterialType {
             MaterialType::Steel => 8.0, // survives up to 8 world-units of stretch
             MaterialType::Wood => 2.0,  // survives up to 2 world-units of stretch
             MaterialType::Stone => 0.0, // no adhesion — stack only
+            // SPRINT 4: Scaffold has the same adhesion as wood — it needs to bond
+            // laterally to arch blocks to hold them in position. Not stronger than
+            // wood because the structure must be able to knock it free by removing it.
+            MaterialType::Scaffold => 2.0, // same as wood — moderate hold
         }
     }
 
@@ -146,7 +191,19 @@ impl MaterialType {
             MaterialType::Steel => 4,
             MaterialType::Wood => 1,
             MaterialType::Stone => 0,
+            MaterialType::Scaffold => 1, // same as wood
         }
+    }
+
+    /// Whether this material type is scaffold (removable temporary support).
+    ///
+    /// SPRINT 4 LEARNING: We use a method rather than a separate field so we
+    /// don't need to pass `is_scaffold` through every constructor call. Any code
+    /// that needs to know "is this removable?" just calls voxel.material.is_scaffold().
+    /// This keeps the Voxel struct lean — one field (material) encodes both
+    /// the physics profile AND the removability flag.
+    pub fn is_scaffold(self) -> bool {
+        matches!(self, MaterialType::Scaffold)
     }
 }
 
@@ -201,11 +258,10 @@ pub struct Voxel {
     pub inv_mass: f32,
 
     /// Coefficient of friction (0.0 = frictionless ice, 1.0 = rubber on concrete)
-    /// 0.8 is realistic for rough stone construction blocks.
     pub friction: f32,
 
     /// Coefficient of restitution (0.0 = dead stop, 1.0 = perfectly elastic bounce)
-    /// 0.0 for construction blocks — they should thud down and stay, not bounce.
+    /// Construction blocks should thud down and stay, not bounce.
     pub restitution: f32,
 
     // =========================================================================
@@ -227,8 +283,7 @@ pub struct Voxel {
     pub rotation: Quat,
 
     /// Angular velocity vector (radians per second around each world axis).
-    /// Not fully used in the current constraint solver (angular XPBD is the
-    /// next sprint), but stored for future rotational dynamics.
+    /// Stored for future full angular XPBD dynamics (Sprint 5+).
     pub angular_velocity: Vec3,
 
     /// Accumulated contact normals this frame (sum of all surface normals that
@@ -251,23 +306,14 @@ pub struct Voxel {
     // =========================================================================
     /// Which material this block is made of.
     /// Determines adhesion_strength, mass, friction, restitution at spawn.
+    /// SPRINT 4: Also encodes whether this block is scaffold (removable).
     pub material: MaterialType,
 
     /// Adhesion strength — how much lateral bond stretch this block can resist.
     ///
-    /// SPRINT 3 BUG FIX — Static Block Bond Registration:
-    /// ---------------------------------------------------
-    /// Previously this was set to 0.0 for static blocks. That caused
-    /// try_register_bonds() to abort early, so a dynamic block with adhesion
-    /// could never bond to a static wall that was spawned after it.
-    ///
-    /// FIX: Static blocks now carry their material's adhesion_strength.
-    /// The mortar system uses this when the NEIGHBOR block is dynamic —
-    /// the bond forms using min(self.adhesion, neighbor.adhesion), so static
-    /// blocks act as valid anchor points for dynamic block bonds.
-    ///
-    /// The inv_mass = 0.0 field already handles the "static blocks don't move"
-    /// invariant in XPBD. adhesion_strength is purely for bond eligibility.
+    /// Static blocks carry their material's adhesion_strength so they can act
+    /// as valid bond anchors for dynamic neighbors.
+    /// The inv_mass = 0.0 field prevents them from being moved by the bond solver.
     pub adhesion_strength: f32,
 }
 
@@ -275,11 +321,6 @@ impl Voxel {
     // =========================================================================
     // Original constructor — defaults to Wood material for backward compatibility
     // =========================================================================
-    //
-    // LEARNING: All existing calls to Voxel::new() (from lib.rs, test_engine.py,
-    // babel_gym_env.py) continue to work unchanged. They get Wood material which
-    // has the same mass as the old default (inv_mass = 1.0). No behavior change
-    // for existing tests.
     pub fn new(x: f32, y: f32, z: f32, shape: ShapeType, is_static: bool) -> Self {
         Self::new_with_material(x, y, z, shape, MaterialType::Wood, is_static)
     }
@@ -288,12 +329,9 @@ impl Voxel {
     // SPRINT 3: Material-aware constructor
     // =========================================================================
     //
-    // This is the preferred constructor going forward. The agent will call this
-    // via a new spawn_block_with_material() Python method (added to lib.rs).
-    //
     // is_static = true → inv_mass forced to 0.0 (immovable) regardless of material.
-    //             adhesion_strength is KEPT from the material — see field comment
-    //             above for why this matters for bond registration.
+    //             adhesion_strength is KEPT from the material so static blocks
+    //             act as valid bond anchors for dynamic neighbors.
     pub fn new_with_material(
         x: f32,
         y: f32,
@@ -303,41 +341,17 @@ impl Voxel {
         is_static: bool,
     ) -> Self {
         // =====================================================================
-        // LEARNING TOPIC: Physics-Derived Mass Values
-        // ============================================
+        // LEARNING TOPIC: Wedge Mass Override
+        // ====================================
+        // The Wedge shape needs a very high mass (2000 kg, inv_mass=0.0005)
+        // regardless of material, to prevent it from flying when a cube lands
+        // on it at high velocity. See xpbd.rs BUG FIX #2 for the physics math.
         //
-        // BUG FIX #2 (Wedge Stability) — Physics Calculation:
-        //
-        // A cube (1 kg) dropped from height h = 10.0 m arrives with velocity:
-        //   v_impact = sqrt(2 * g * h) = sqrt(2 * 9.81 * 10) ≈ 14.0 m/s
-        //
-        // Impact momentum:
-        //   p = m_cube * v_impact = 1.0 * 14.0 = 14.0 kg·m/s
-        //
-        // For the wedge to not visibly move, its velocity change must be tiny:
-        //   Δv_wedge = p / m_wedge < 0.01 m/s  (imperceptible threshold)
-        //   m_wedge > p / 0.01 = 14.0 / 0.01 = 1400 kg
-        //
-        // We use m_wedge = 2000 kg (generous safety factor ≈ 1.4×):
-        //   inv_mass_wedge = 1 / 2000 = 0.0005
-        //
-        // Additionally, in xpbd.rs we pin the wedge's correction share to
-        // near-zero when it's settled on the ground, making it behave as a
-        // static platform for collision response (the cube slides up the slope
-        // instead of sending the wedge flying backward).
-        //
-        // OLD VALUE: 0.002  (mass = 500 kg → Δv ≈ 0.028 m/s → visible wobble)
-        // NEW VALUE: 0.0005 (mass = 2000 kg → Δv ≈ 0.007 m/s → imperceptible)
-        //
-        // SPRINT 3: Wedge special case — must be heavy enough to not fly when hit.
-        // We keep the Sprint 2 fix (0.0005) only for the Wedge shape,
-        // overriding whatever the material says for mass.
-        // Rationale: a wedge is a ramp — its stability matters more than
-        // matching the material's weight. This can be revisited in Sprint 5
-        // when humanoid locomotion needs climbing on wedge ramps.
+        // Scaffold wedges are not expected in practice (scaffolding is always
+        // cubes), but we keep the override consistent.
         // =====================================================================
         let dynamic_inv_mass = if shape == ShapeType::Wedge {
-            0.0005 // Sprint 2 wedge stability fix — keep unchanged
+            0.0005 // Wedge stability fix — 2000 kg to resist impact momentum
         } else {
             material.inv_mass()
         };
@@ -357,26 +371,12 @@ impl Voxel {
             contact_count: 0,
             is_sleeping: false,
             material,
-            // =================================================================
-            // SPRINT 3 BUG FIX: Do NOT zero out adhesion_strength for static
-            // blocks. Static blocks serve as valid bond anchors for dynamic
-            // neighbors. Their inv_mass = 0.0 already prevents them from being
-            // pushed by the bond solver — adhesion_strength is orthogonal.
-            //
-            // Stone material returns 0.0 regardless, so Stone static walls
-            // still won't bond to anything. This is the correct behavior.
-            // =================================================================
             adhesion_strength: material.adhesion_strength(),
         }
     }
 
     // =========================================================================
-    // LEARNING TOPIC: Builder Pattern for Variant Construction
-    // =========================================================
-    // Instead of overloading `new()` (Rust doesn't have function overloading),
-    // we provide a separate named constructor for specialized configurations.
-    // new_sphere() creates a sphere voxel with a custom radius — it delegates
-    // to new() then overrides just the sphere-specific field.
+    // Sphere constructor — delegates to new() then overrides sphere_radius
     // =========================================================================
     pub fn new_sphere(x: f32, y: f32, z: f32, radius: f32, is_static: bool) -> Self {
         let mut voxel = Self::new(x, y, z, ShapeType::Sphere, is_static);

@@ -905,7 +905,9 @@ pub fn solve_constraints_system(
     mut buffers: ResMut<SolverBuffers>,
 ) {
     let dynamic_count = query.iter().filter(|(_, v)| v.inv_mass > 0.0).count();
-    let solver_iterations = if dynamic_count >= 400 {
+    let solver_iterations = if dynamic_count >= 500 {
+        1
+    } else if dynamic_count >= 350 {
         2
     } else if dynamic_count >= 200 {
         4

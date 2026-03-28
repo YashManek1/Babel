@@ -98,6 +98,7 @@
 use bevy_ecs::prelude::*;
 use numpy::{PyArray1, PyArrayMethods, PyReadwriteArray1};
 use pyo3::prelude::*;
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use winit::{
     application::ApplicationHandler,
@@ -122,10 +123,25 @@ use physics::mortar::{
     MortarBonds, break_overloaded_bonds_system, register_new_bonds_system,
     solve_mortar_constraints_system, try_register_bonds,
 };
+use physics::stress::{StressMap, compute_stress_system};
 use physics::xpbd::{PhysicsSettings, SolverBuffers};
 use render::wgpu_view::{RenderContext, UiCommand};
 use world::spatial_grid::SpatialGrid;
 use world::voxel::{MaterialType, ShapeType, Voxel};
+
+// =============================================================================
+// SPRINT 4: ScaffoldTracker Resource
+// =============================================================================
+//
+// LEARNING TOPIC: Why Track Scaffold Entities Separately?
+// -------------------------------------------------------
+// Mass scaffold removal should be O(N_scaffold), not O(N_world).
+// A HashSet<Entity> lets us despawn all scaffold blocks directly without
+// scanning every voxel in the ECS world.
+#[derive(Resource, Default)]
+pub struct ScaffoldTracker {
+    pub entities: HashSet<Entity>,
+}
 
 // =============================================================================
 // OPTIMIZATION CONSTANT: Maximum Stack Height Cap
@@ -159,6 +175,7 @@ fn material_from_id(material_id: u8) -> MaterialType {
         0 => MaterialType::Wood,
         1 => MaterialType::Steel,
         2 => MaterialType::Stone,
+        3 => MaterialType::Scaffold,
         _ => MaterialType::Wood,
     }
 }
@@ -357,6 +374,8 @@ fn build_ecs_and_schedule() -> (World, Schedule) {
     ecs_world.insert_resource(PhysicsSettings::default());
     ecs_world.insert_resource(SolverBuffers::default());
     ecs_world.insert_resource(MortarBonds::default()); // SPRINT 3: bond registry
+    ecs_world.insert_resource(StressMap::default());
+    ecs_world.insert_resource(ScaffoldTracker::default());
 
     // =======================================================================
     // LEARNING: Bevy's System Scheduling and .chain()
@@ -394,6 +413,7 @@ fn build_ecs_and_schedule() -> (World, Schedule) {
             break_overloaded_bonds_system,   // SPRINT 3
             physics::xpbd::update_velocities_system,
             world::spatial_grid::update_spatial_grid_system,
+            compute_stress_system,
         )
             .chain(),
     );
@@ -427,6 +447,7 @@ fn spawn_voxel_and_register(
     material: MaterialType,
     is_static: bool,
 ) -> Entity {
+    let is_scaffold = material.is_scaffold();
     let voxel = Voxel::new_with_material(x, y, z, shape, material, is_static);
     let entity = ecs_world.spawn(voxel).id();
 
@@ -454,6 +475,12 @@ fn spawn_voxel_and_register(
 
     ecs_world.insert_resource(grid);
     ecs_world.insert_resource(bonds);
+
+    if is_scaffold {
+        let mut tracker = ecs_world.remove_resource::<ScaffoldTracker>().unwrap();
+        tracker.entities.insert(entity);
+        ecs_world.insert_resource(tracker);
+    }
 
     entity
 }
@@ -685,6 +712,35 @@ impl BabelEngine {
     }
 
     // =========================================================================
+    // SPRINT 4: get_stress_data() — Stress values for Python reward shaping
+    // =========================================================================
+    pub fn get_stress_data(&self) -> PyResult<(f32, f32, usize)> {
+        let stress_map = self.ecs_world.get_resource::<StressMap>().unwrap();
+
+        if stress_map.data.is_empty() {
+            return Ok((0.0, 0.0, 0));
+        }
+
+        let mut max_stress = 0.0f32;
+        let mut sum_stress = 0.0f32;
+        let mut n_critical = 0usize;
+
+        for info in stress_map.data.values() {
+            let s = info.stress_normalized;
+            if s > max_stress {
+                max_stress = s;
+            }
+            sum_stress += s;
+            if s > 0.8 {
+                n_critical += 1;
+            }
+        }
+
+        let avg_stress = sum_stress / stress_map.data.len() as f32;
+        Ok((max_stress, avg_stress, n_critical))
+    }
+
+    // =========================================================================
     // get_benchmark_stats() — Real steps/second measurement
     // =========================================================================
     //
@@ -810,6 +866,63 @@ impl BabelEngine {
     }
 
     // =========================================================================
+    // SPRINT 4: spawn_scaffold() — Convenience API for scaffold placement
+    // =========================================================================
+    pub fn spawn_scaffold(&mut self, x: f32, y: f32, z: f32) -> PyResult<usize> {
+        spawn_voxel_and_register(
+            &mut self.ecs_world,
+            x,
+            y,
+            z,
+            ShapeType::Cube,
+            MaterialType::Scaffold,
+            false,
+        );
+        let tracker = self.ecs_world.get_resource::<ScaffoldTracker>().unwrap();
+        Ok(tracker.entities.len())
+    }
+
+    // =========================================================================
+    // SPRINT 4: despawn_scaffolding() — Remove ALL scaffold blocks at once
+    // =========================================================================
+    pub fn despawn_scaffolding(&mut self) -> PyResult<usize> {
+        let scaffold_entities: Vec<Entity> = {
+            let tracker = self.ecs_world.get_resource::<ScaffoldTracker>().unwrap();
+            tracker.entities.iter().copied().collect()
+        };
+
+        let count = scaffold_entities.len();
+
+        {
+            let mut bonds = self.ecs_world.get_resource_mut::<MortarBonds>().unwrap();
+            for &entity in &scaffold_entities {
+                bonds.remove_bonds_for(entity);
+            }
+        }
+
+        for &entity in &scaffold_entities {
+            self.ecs_world.despawn(entity);
+        }
+
+        {
+            let mut tracker = self
+                .ecs_world
+                .get_resource_mut::<ScaffoldTracker>()
+                .unwrap();
+            tracker.entities.clear();
+        }
+
+        {
+            let mut stress_map = self.ecs_world.get_resource_mut::<StressMap>().unwrap();
+            for &entity in &scaffold_entities {
+                stress_map.data.remove(&entity);
+            }
+        }
+
+        Ok(count)
+    }
+
+    // =========================================================================
     // SPRINT 3+: spawn_sphere_with_material() — Material-aware sphere spawn
     // =========================================================================
     //
@@ -843,6 +956,14 @@ impl BabelEngine {
     }
 
     // =========================================================================
+    // SPRINT 4: scaffold_count() — How many scaffold blocks currently exist
+    // =========================================================================
+    pub fn scaffold_count(&self) -> PyResult<usize> {
+        let tracker = self.ecs_world.get_resource::<ScaffoldTracker>().unwrap();
+        Ok(tracker.entities.len())
+    }
+
+    // =========================================================================
     // clear_dynamic_blocks() — SPRINT 3: also clears all mortar bonds
     // =========================================================================
     pub fn clear_dynamic_blocks(&mut self) -> PyResult<usize> {
@@ -869,6 +990,19 @@ impl BabelEngine {
             // Bevy's archetype system immediately reclaims the memory slot,
             // making it available for future spawn() calls without reallocation.
             self.ecs_world.despawn(entity);
+        }
+
+        {
+            let mut tracker = self
+                .ecs_world
+                .get_resource_mut::<ScaffoldTracker>()
+                .unwrap();
+            tracker.entities.clear();
+        }
+
+        {
+            let mut stress_map = self.ecs_world.get_resource_mut::<StressMap>().unwrap();
+            stress_map.data.clear();
         }
 
         Ok(count)
@@ -920,25 +1054,52 @@ impl BabelEngine {
             renderer.camera.update(dt);
         }
         {
-            let mut query = self.ecs_world.query::<&Voxel>();
-            let voxels: Vec<&Voxel> = query.iter(&self.ecs_world).collect();
+            // SPRINT 4: Pass StressMap to the renderer so blocks are colored
+            // by stress level. Snapshot stress first to avoid overlapping world borrows.
+            let stress_by_entity: std::collections::HashMap<Entity, f32> = {
+                let stress_map = self.ecs_world.get_resource::<StressMap>().unwrap();
+                stress_map
+                    .data
+                    .iter()
+                    .map(|(&entity, info)| (entity, info.stress_normalized))
+                    .collect()
+            };
+
+            let mut query = self.ecs_world.query::<(Entity, &Voxel)>();
+            let voxels_with_stress: Vec<(&Voxel, f32, bool)> = query
+                .iter(&self.ecs_world)
+                .map(|(entity, voxel)| {
+                    let stress = stress_by_entity.get(&entity).copied().unwrap_or(0.0);
+                    (voxel, stress, voxel.material.is_scaffold())
+                })
+                .collect();
+
             if let Some(renderer) = &mut self.renderer {
-                commands_to_execute = renderer.render_frame(&voxels);
+                commands_to_execute = renderer.render_frame_with_stress(&voxels_with_stress);
             }
         }
 
         for cmd in commands_to_execute {
+            if let UiCommand::DespawnAllScaffold = cmd {
+                let _ = self.despawn_scaffolding();
+                continue;
+            }
+
             let drop_height = {
                 let gx = (match &cmd {
                     UiCommand::SpawnCube { x, .. }
                     | UiCommand::SpawnWedge { x, .. }
-                    | UiCommand::SpawnSphere { x, .. } => *x,
+                    | UiCommand::SpawnSphere { x, .. }
+                    | UiCommand::SpawnScaffold { x, .. } => *x,
+                    UiCommand::DespawnAllScaffold => unreachable!(),
                 })
                 .round() as i32;
                 let gz = (match &cmd {
                     UiCommand::SpawnCube { z, .. }
                     | UiCommand::SpawnWedge { z, .. }
-                    | UiCommand::SpawnSphere { z, .. } => *z,
+                    | UiCommand::SpawnSphere { z, .. }
+                    | UiCommand::SpawnScaffold { z, .. } => *z,
+                    UiCommand::DespawnAllScaffold => unreachable!(),
                 })
                 .round() as i32;
 
@@ -988,6 +1149,18 @@ impl BabelEngine {
                         false,
                     );
                 }
+                UiCommand::SpawnScaffold { x, z } => {
+                    spawn_voxel_and_register(
+                        &mut self.ecs_world,
+                        x,
+                        drop_height,
+                        z,
+                        ShapeType::Cube,
+                        MaterialType::Scaffold,
+                        false,
+                    );
+                }
+                UiCommand::DespawnAllScaffold => unreachable!(),
             }
         }
     }
@@ -1083,6 +1256,10 @@ pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64,
     ecs_world.insert_resource(PhysicsSettings::default());
     ecs_world.insert_resource(SolverBuffers::default());
     ecs_world.insert_resource(MortarBonds::default());
+    let mut stress_map = StressMap::default();
+    stress_map.min_update_interval = 8;
+    ecs_world.insert_resource(stress_map);
+    ecs_world.insert_resource(ScaffoldTracker::default());
 
     let mut schedule = Schedule::default();
     schedule.add_systems(
@@ -1095,6 +1272,7 @@ pub fn run_headless_benchmark(n_blocks: usize, n_steps: usize) -> PyResult<(f64,
             break_overloaded_bonds_system,
             physics::xpbd::update_velocities_system,
             world::spatial_grid::update_spatial_grid_system,
+            compute_stress_system,
         )
             .chain(),
     );
