@@ -535,7 +535,7 @@ mod tests {
         // Now spawn a side block at X+1 — this triggered the lateral drag bug
         let _side = world
             .spawn(Voxel::new_with_material(
-                2.0,
+                1.0,
                 0.5,
                 0.0,
                 ShapeType::Cube,

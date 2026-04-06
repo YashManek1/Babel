@@ -474,26 +474,22 @@ mod tests {
         let heavy_pos_after = voxel_pos(&world, heavy_e);
         let light_pos_after = voxel_pos(&world, light_e);
 
-        // ── Check 1: Heavy block must move significantly more than light block ─
-        // XPBD correction share = inv_mass_self / (inv_mass_self + inv_mass_other)
-        // For Steel vs Wood:
-        //   inv_steel = 1/800 ≈ 0.00125
-        //   inv_wood  = 1.0
-        //   steel_share = 0.00125 / 1.00125 ≈ 0.00125 (barely moves)
-        //   wood_share  = 1.0    / 1.00125 ≈ 0.99875 (absorbs almost all)
-        let heavy_displacement = (heavy_pos_after.x - heavy_x_before).abs();
-        let light_displacement = (light_pos_after.x - 0.8).abs();
+        let heavy_vel = voxel_vel(&world, heavy_e);
+        let light_vel = voxel_vel(&world, light_e);
+
+        let heavy_delta_v = (heavy_vel.x - 3.0).abs();
+        let light_delta_v = (light_vel.x - 0.0).abs();
 
         log.assert_true(
-            "heavy_moves_less_than_light",
+            "heavy_velocity_change_less_than_light",
             "Steel block (800 kg) correction share ≈ 0.00125, Wood share ≈ 0.998. \
-             Steel block displacement must be << Wood block displacement. \
-             If heavy moves more than light, the inv_mass share formula is inverted.",
-            heavy_displacement < light_displacement,
+             Steel block velocity change must be << Wood block velocity change. \
+             If heavy delta_v > light delta_v, the inv_mass share formula is inverted.",
+            heavy_delta_v < light_delta_v,
             format!(
-                "heavy_displacement={:.6}  light_displacement={:.6}  \
+                "heavy_delta_v={:.6}  light_delta_v={:.6}  \
                  Expected heavy << light based on mass ratio 800:1",
-                heavy_displacement, light_displacement
+                heavy_delta_v, light_delta_v
             ),
         );
 
