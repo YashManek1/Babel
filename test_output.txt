@@ -1,3 +1,4 @@
+   Compiling babel_engine v0.1.0 (C:\My Project\Babel\engine)
 warning: unused import: `glam::Vec3`
   --> src\tests\stability.rs:66:9
    |
@@ -133,39 +134,39 @@ warning: function `parse_action` is never used
     |        ^^^^^^^^^^^^
 
 warning: `babel_engine` (lib test) generated 19 warnings (run `cargo fix --lib -p babel_engine --tests` to apply 5 suggestions)
-    Finished `test` profile [optimized + debuginfo] target(s) in 0.28s
+    Finished `test` profile [optimized + debuginfo] target(s) in 4.45s
+     Running unittests src\lib.rs (target\debug\deps\babel_engine-561aa1ff7327966c.exe)
 
 running 32 tests
-     Running unittests src\lib.rs (target\debug\deps\babel_engine-561aa1ff7327966c.exe)
-test tests::collision::tests::test_static_block_never_moves ... ok
 test tests::collision::tests::test_aabb_heavy_vs_light_mass_sharing ... ok
 test tests::collision::tests::test_aabb_cube_on_static_floor ... ok
-test tests::collision::tests::test_sphere_on_flat_floor_correct_height ... ok
 test tests::collision::tests::test_aabb_two_dynamic_equal_mass_collision ... ok
+test tests::collision::tests::test_sphere_on_flat_floor_correct_height ... ok
+test tests::collision::tests::test_static_block_never_moves ... ok
 test tests::collision::tests::test_cube_on_wedge_slides_not_launches ... ok
-test tests::energy::tests::test_ke_dissipation_rate_after_impact ... ok
 test tests::collision::tests::test_aabb_cube_on_cube_stack ... ok
-test tests::constraint::tests::test_constraint_no_penetration_100_steps ... ok
+test tests::energy::tests::test_ke_dissipation_rate_after_impact ... ok
 test tests::stability::tests::test_restitution_energy_loss ... ok
-test tests::energy::tests::test_total_energy_not_created_on_collision ... ok
-test tests::energy::tests::test_y_velocity_decreases_on_dead_bounce ... ok
-test tests::stability::tests::test_lateral_side_drag_regression ... ok
 test tests::stability::tests::test_single_block_reaches_sleep ... ok
 test tests::energy::tests::test_ke_zero_in_static_world ... ok
-test tests::stability::tests::test_sleep_wakes_on_impact ... ok
-test tests::constraint::tests::test_bond_tension_never_exceeds_adhesion_before_break ... ok
+test tests::energy::tests::test_total_energy_not_created_on_collision ... ok
 test tests::collision::tests::test_no_penetration_in_settled_pillar ... ok
-test tests::stability::tests::test_steel_pair_no_vibration ... ok
+test tests::constraint::tests::test_constraint_no_penetration_100_steps ... ok
+test tests::energy::tests::test_y_velocity_decreases_on_dead_bounce ... ok
+test tests::stability::tests::test_lateral_side_drag_regression ... ok
+test tests::constraint::tests::test_bond_tension_never_exceeds_adhesion_before_break ... ok
+test tests::stability::tests::test_sleep_wakes_on_impact ... ok
 test tests::constraint::tests::test_no_block_below_floor ... ok
 test tests::energy::tests::test_ke_monotone_after_settle ... ok
 test tests::energy::tests::test_ke_spike_detection_pillar_flying_regression ... ok
 test tests::stress_tests::tests::test_scaffold_stress_capacity_is_low ... ok
+test tests::stability::tests::test_steel_pair_no_vibration ... ok
 test tests::stress_tests::tests::test_floor_support_flag_propagates ... ok
-test tests::stress_tests::tests::test_single_column_stress_propagation ... ok
-test tests::stability::tests::test_ten_block_pillar_no_jitter ... ok
 test tests::stability::tests::test_pillar_stable_height_preserved ... ok
-test tests::stress_tests::tests::test_stress_normalized_range ... ok
+test tests::stress_tests::tests::test_single_column_stress_propagation ... ok
 test tests::stress_tests::tests::test_stress_increases_with_load ... ok
+test tests::stress_tests::tests::test_stress_normalized_range ... ok
+test tests::stability::tests::test_ten_block_pillar_no_jitter ... ok
 test tests::constraint::tests::test_no_nan_or_inf_positions ... ok
 test tests::constraint::tests::test_static_blocks_position_invariant ... ok
 test tests::constraint::tests::test_constraint_no_penetration_1000_steps ... ok
