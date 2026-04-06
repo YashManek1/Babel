@@ -118,6 +118,10 @@ mod world;
 // We declare it here so it compiles as part of this crate.
 // =============================================================================
 mod bridge;
+// Bring the `tests` module (src/tests/mod.rs) into scope ONLY when testing.
+// This prevents the test harness from bloating the Python production build.
+#[cfg(test)]
+mod tests;
 
 use physics::mortar::{
     MortarBonds, break_overloaded_bonds_system, register_new_bonds_system,

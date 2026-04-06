@@ -1,0 +1,1705 @@
+running 32 tests
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_aabb_heavy_vs_light_mass_sharing
+  Category  : COLLISION
+  Verdict   : FAIL  (1/2 checks passed)
+  Duration  : 2ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1004  blocks=2  warmup_steps=0  measured_steps=60
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    heavy_material=Steel (800 kg)
+    light_material=Wood (1 kg)
+    heavy_initial_vel_x=3.0 m/s
+    expected=heavy barely deflects, light absorbs ~99.9%
+
+test tests::collision::tests::test_aabb_heavy_vs_light_mass_sharing ... FAILED
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] heavy_moves_less_than_light
+description : Steel block (800 kg) correction share Γëê 0.00125, Wood share Γëê 0.998. Steel block displacement must be << Wood block displacement. If heavy moves more than light, the inv_mass share formula is inverted.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [FAIL] heavy_block_continues_forward
+description : Steel block moving at 3 m/s into a 1 kg Wood block should barely slow down. The heavy block must still have positive X velocity after collision (it has 800├ù more momentum).
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : heavy vel.x after collision = 0.000000 (expected > 0.5 m/s for 800 kg block)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::collision::tests::test_aabb_heavy_vs_light_mass_sharing' (20844) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_aabb_heavy_vs_light_mass_sharing
+  Category  : COLLISION
+  Verdict   : FAIL  (1/2 checks passed)
+  Duration  : 2ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1004  blocks=2  warmup_steps=0  measured_steps=60
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    heavy_material=Steel (800 kg)
+    light_material=Wood (1 kg)
+    heavy_initial_vel_x=3.0 m/s
+    expected=heavy barely deflects, light absorbs ~99.9%
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] heavy_moves_less_than_light
+description : Steel block (800 kg) correction share Γëê 0.00125, Wood share Γëê 0.998. Steel block displacement must be << Wood block displacement. If heavy moves more than light, the inv_mass share formula is inverted.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [FAIL] heavy_block_continues_forward
+description : Steel block moving at 3 m/s into a 1 kg Wood block should barely slow down. The heavy block must still have positive X velocity after collision (it has 800├ù more momentum).
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : heavy vel.x after collision = 0.000000 (expected > 0.5 m/s for 800 kg block)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_aabb_two_dynamic_equal_mass_collision
+  Category  : COLLISION
+  Verdict   : FAIL  (3/4 checks passed)
+  Duration  : 4ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1003  blocks=2  warmup_steps=0  measured_steps=120
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    block_a_initial_vel_x=5.0 m/s
+    block_b_initial_vel_x=0.0 m/s
+    both_mass=1.0 kg (Wood)
+    collision_axis=X
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] momentum_not_created
+description : Final total X-momentum must not exceed initial X-momentum (energy cannot be created). XPBD with damping dissipates some momentum, so p_final <= p_initial is the correct bound. p_final > p_initial indicates the solver is adding energy ΓÇö a critical correctness failure.
+observed    : 0.000000
+expected    : Γëñ 5.100000
+tolerance   : strict upper bound
+  [PASS] kinetic_energy_not_created
+description : Final total kinetic energy must not exceed initial KE. Energy creation indicates a constraint correction amplified velocity ΓÇö a fundamental solver violation.
+observed    : 0.000000
+expected    : Γëñ 13.000000
+tolerance   : strict upper bound
+  [FAIL] block_b_acquired_velocity
+description : After collision, Block B (initially stationary) must have positive X velocity. vel_b.x <= 0 means the collision correction was never applied or was applied in the wrong direction.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : Block B X velocity after collision = 0.000000 m/s (expected > 0)
+  [PASS] no_spurious_y_velocity_block_a
+description : Pure X-axis collision must not produce large Y velocity in block A. Large Y velocity indicates the contact normal computation is using the wrong separation axis.
+observed    : 0.000000
+expected    : Γëñ 1.500000
+tolerance   : strict upper bound
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_sphere_on_flat_floor_correct_height
+  Category  : COLLISION
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 5ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1007  blocks=1  warmup_steps=0  measured_steps=300
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    sphere_radius=0.5
+    drop_height=5.0
+    floor_y=-0.5
+    expected_centre_y=0.0 (radius above floor)
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] sphere_centre_y
+description : Sphere (radius=0.5) on floor (floor_y=-0.5) must have centre at y = floor_y + radius = 0.0. y < -0.05 ΓåÆ sphere sank through floor (floor uses cube half-extent, not sphere radius). y > 0.05  ΓåÆ sphere is floating (constraint too aggressive).
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.060000
+tolerance   : ╬╡ = 0.060000
+  [PASS] sphere_settled
+description : Sphere must be settled (speed < 0.20 m/s) after 300 steps.
+observed    : 0.000000
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::collision::tests::test_aabb_two_dynamic_equal_mass_collision' (8100
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_static_block_never_moves
+  Category  : COLLISION
+  Verdict   : PASS  (4/4 checks passed)
+  Duration  : 1ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1005  blocks=2  warmup_steps=0  measured_steps=120
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    static_block_pos=(0,0,0)
+    dynamic_block_initial_vel=10.0 m/s on X axis
+    max_allowed_static_displacement=0.001 units
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] static_block_zero_displacement
+description : Static block (inv_mass=0.0) must not move when struck at 10 m/s. The XPBD formula gives correction_share = 0.0 / (0.0 + inv_dyn) = 0. Any displacement > 0.001 units means the share formula is applied to static entities incorrectly.
+observed    : 0.000000
+expected    : Γëñ 0.001000
+tolerance   : strict upper bound
+  [PASS] static_x_unchanged
+description : Static block X coordinate must be unchanged.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.001000
+tolerance   : ╬╡ = 0.001000
+  [PASS] static_y_unchanged
+description : Static block Y coordinate must be unchanged.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.001000
+tolerance   : ╬╡ = 0.001000
+  [PASS] static_z_unchanged
+description : Static block Z coordinate must be unchanged.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.001000
+tolerance   : ╬╡ = 0.001000
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_aabb_two_dynamic_equal_mass_collision
+  Category  : COLLISION
+  Verdict   : FAIL  (3/4 checks passed)
+  Duration  : 4ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1003  blocks=2  warmup_steps=0  measured_steps=120
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    block_a_initial_vel_x=5.0 m/s
+    block_b_initial_vel_x=0.0 m/s
+    both_mass=1.0 kg (Wood)
+    collision_axis=X
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] momentum_not_created
+description : Final total X-momentum must not exceed initial X-momentum (energy cannot be created). XPBD with damping dissipates some momentum, so p_final <= p_initial is the correct bound. p_final > p_initial indicates the solver is adding energy ΓÇö a critical correctness failure.
+observed    : 0.000000
+expected    : Γëñ 5.100000
+tolerance   : strict upper bound
+  [PASS] kinetic_energy_not_created
+description : Final total kinetic energy must not exceed initial KE. Energy creation indicates a constraint correction amplified velocity ΓÇö a fundamental solver violation.
+observed    : 0.000000
+expected    : Γëñ 13.000000
+tolerance   : strict upper bound
+  [FAIL] block_b_acquired_velocity
+description : After collision, Block B (initially stationary) must have positive X velocity. vel_b.x <= 0 means the collision correction was never applied or was applied in the wrong direction.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : Block B X velocity after collision = 0.000000 m/s (expected > 0)
+  [PASS] no_spurious_y_velocity_block_a
+test tests::collision::tests::test_sphere_on_flat_floor_correct_height ... ok
+description : Pure X-axis collision must not produce large Y velocity in block A. Large Y velocity indicates the contact normal computation is using the wrong separation axis.
+observed    : 0.000000
+expected    : Γëñ 1.500000
+tolerance   : strict upper bound
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_aabb_cube_on_static_floor
+  Category  : COLLISION
+  Verdict   : FAIL  (4/5 checks passed)
+  Duration  : 5ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1001  blocks=1  warmup_steps=0  measured_steps=300
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    drop_height=5.0
+    expected_rest_y=0.5
+    floor_y=-0.5
+    shape=Cube
+    material=Wood (1 kg)
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] final_y_position
+description : Cube dropped from y=5.0 must rest with centre at y=0.0 (bottom face touching floor at y=-0.5). Verifies XPBD floor constraint pushes block to exact floor contact without sinking (y < 0.0) or floating (y > 0.05).
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.050000
+tolerance   : ╬╡ = 0.050000
+  [PASS] final_x_no_drift
+description : No lateral forces ΓÇö X position must remain at spawn X=0.0. Non-zero X indicates a spurious lateral correction in the solver.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.010000
+tolerance   : ╬╡ = 0.010000
+  [PASS] final_z_no_drift
+description : No lateral forces ΓÇö Z position must remain at spawn Z=0.0.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.010000
+tolerance   : ╬╡ = 0.010000
+  [PASS] final_speed_at_rest
+description : After 300 steps the block must be stationary. Speed must be below LINEAR_SLEEP_SPEED (0.20 m/s). Non-zero speed indicates the block is still bouncing or vibrating ΓÇö damping/restitution bug.
+observed    : 0.000000
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+  [FAIL] sleep_flag_set
+description : Block must have entered sleep state after settling. is_sleeping=false after 300 steps indicates the sleep threshold is not being triggered ΓÇö check LINEAR_SLEEP_SPEED constant.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : Block is not sleeping after 300 steps. The sleep system may not be engaging for floor contacts.
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ke_dissipation_rate_after_impact
+  Category  : ENERGY
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 5ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5003  blocks=1  warmup_steps=0  measured_steps=200
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    drop_height=5.0
+    material=Wood (restitution=0.0)
+    damping=POSITION_VELOCITY_DAMPING=0.94 per contact step
+    expected=80% KE dissipation within 60 steps of floor impact
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] block_hit_floor
+description : Block must have fallen from y=5.0 and hit the floor. If peak_ke Γëê 0, the block never fell (gravity integration broken). Expected peak KE Γëê 0.5 ├ù 1 kg ├ù (2├ù9.81├ù5)^0.5 Γëê 7.0 J at impact.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] ke_80pct_dissipated_in_60_steps
+description : Wood block (restitution=0, damping=0.94/contact) must dissipate ΓëÑ 80% of peak KE within 60 steps (~1 second simulated) of floor impact. Lower dissipation rate means damping is not being applied on contact, or the restitution value is too high for Wood.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::collision::tests::test_aabb_cube_on_static_floor' (
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_aabb_cube_on_cube_stack
+  Category  : COLLISION
+  Verdict   : PASS  (4/4 checks passed)
+  Duration  : 7ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1002  blocks=2  warmup_steps=0  measured_steps=400
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    block_a=static at (0,0,0)
+    block_b=dynamic, dropped from (0,3,0)
+    expected_b_rest_y=1.0
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] static_block_a_y_unchanged
+description : Static block A (inv_mass=0) must not move when block B lands on it. Any movement indicates the static constraint is broken ΓÇö the solver is applying a non-zero correction share to the static body.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.001000
+tolerance   : ╬╡ = 0.001000
+  [PASS] dynamic_block_b_rest_y
+description : Block B must rest with centre at y=1.0 (one block-width above block A). y < 0.95 ΓåÆ sinking through A (penetration correction failed). y > 1.05 ΓåÆ floating above A (correction overshot or block A was moved upward).
+observed    : 1.000000
+expected    : 1.000000 ┬▒ 0.050000
+tolerance   : ╬╡ = 0.050000
+  [PASS] block_b_settled_speed
+description : Block B velocity must be below sleep threshold after 400 steps. Persistent velocity indicates damping or contact friction is not engaging correctly for block-on-block contacts.
+observed    : 0.000000
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+  [PASS] inter_block_separation
+description : Centre-to-centre Y separation must equal 1.0 world-units (two cubes of half-extent 0.5 touching face-to-face). Deviation indicates residual penetration or a floating gap.
+observed    : 1.000000
+expected    : 1.000000 ┬▒ 0.050000
+tolerance   : ╬╡ = 0.050000
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+7908
+) panicked at 
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_cube_on_wedge_slides_not_launches
+  Category  : COLLISION
+  Verdict   : PASS  (3/3 checks passed)
+  Duration  : 6ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1006  blocks=2  warmup_steps=0  measured_steps=200
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    wedge_pos=(0, 0, 0)
+    cube_drop_height=3.0
+    max_allowed_velocity=25.0 m/s (MAX_VELOCITY)
+    regression_guard=wedge launch bug ΓÇö cube must slide not fly
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] cube_speed_under_limit
+description : Cube dropped on wedge must NOT reach MAX_VELOCITY (25 m/s). Speed > 10 m/s indicates the wedge-launch regression has returned: the solver computed a massive correction along the slope normal and derived an enormous velocity from it. Fix: verify WEDGE_SETTLED_SHARE_CAP is being applied in xpbd.rs.
+observed    : 0.000000
+expected    : Γëñ 10.000000
+tolerance   : strict upper bound
+  [PASS] cube_has_moved_from_spawn
+description : Cube must have moved from its spawn position. A cube on a wedge slope should slide. Zero movement indicates the cube is stuck in the wedge (penetration not resolved) or fell through (missed collision).
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] wedge_barely_moves
+test tests::collision::tests::test_static_block_never_moves ... ok
+description : Steel wedge (2000 kg, WEDGE_SETTLED_SHARE_CAP) must have near-zero velocity after cube impact. High wedge speed means the settled-wedge share cap is not being applied.
+observed    : 0.000000
+expected    : Γëñ 2.000000
+tolerance   : strict upper bound
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+src\tests\mod.rs
+:376:13:
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_constraint_no_penetration_100_steps
+  Category  : CONSTRAINT
+  Verdict   : FAIL  (0/1 checks passed)
+  Duration  : 9ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4001  blocks=5  warmup_steps=0  measured_steps=100
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    check_frequency=every step
+    max_allowed_penetration=0.01 world-units
+    material=mixed Wood/Steel/Stone
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] max_penetration_ever
+description : Over 100 physics steps, the maximum penetration depth between any two block pair must never exceed 0.01 world-units. This is the runtime constraint violation check: the XPBD solver must resolve all overlaps every single step. Penetration > 0.01 means the solver converged to a wrong answer for some configuration, and the RL agent would observe blocks inside each other.
+observed    : 0.966691
+expected    : Γëñ 0.010000
+tolerance   : strict upper bound
+         diagnosis   : Observed 0.966691 exceeds threshold 0.010000 by 0.956691. Context: max_penetration=0.966691  worst_step=36  worst_pair=(1,2)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_aabb_cube_on_static_floor
+  Category  : COLLISION
+  Verdict   : FAIL  (4/5 checks passed)
+  Duration  : 5ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1001  blocks=1  warmup_steps=0  measured_steps=300
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    drop_height=5.0
+    expected_rest_y=0.5
+    floor_y=-0.5
+    shape=Cube
+    material=Wood (1 kg)
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] final_y_position
+description : Cube dropped from y=5.0 must rest with centre at y=0.0 (bottom face touching floor at y=-0.5). Verifies XPBD floor constraint pushes block to exact floor contact without sinking (y < 0.0) or floating (y > 0.05).
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.050000
+tolerance   : ╬╡ = 0.050000
+  [PASS] final_x_no_drift
+description : No lateral forces ΓÇö X position must remain at spawn X=0.0. Non-zero X indicates a spurious lateral correction in the solver.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.010000
+tolerance   : ╬╡ = 0.010000
+  [PASS] final_z_no_drift
+description : No lateral forces ΓÇö Z position must remain at spawn Z=0.0.
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.010000
+tolerance   : ╬╡ = 0.010000
+  [PASS] final_speed_at_rest
+description : After 300 steps the block must be stationary. Speed must be below LINEAR_SLEEP_SPEED (0.20 m/s). Non-zero speed indicates the block is still bouncing or vibrating ΓÇö damping/restitution bug.
+observed    : 0.000000
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+  [FAIL] sleep_flag_set
+description : Block must have entered sleep state after settling. is_sleeping=false after 300 steps indicates the sleep threshold is not being triggered ΓÇö check LINEAR_SLEEP_SPEED constant.
+observed    : false
+test tests::collision::tests::test_aabb_two_dynamic_equal_mass_collision ... FAILED
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : Block is not sleeping after 300 steps. The sleep system may not be engaging for floor contacts.
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_bond_tension_never_exceeds_adhesion_before_break
+  Category  : CONSTRAINT
+  Verdict   : PASS  (1/1 checks passed)
+  Duration  : 19ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4003  blocks=4  warmup_steps=0  measured_steps=300
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=Wood blocks in an L-shape with one overhang
+    invariant=no live bond has tension > adhesion_strength
+    adhesion_wood=2.0 world-units of max stretch
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] no_live_bond_exceeds_adhesion
+description : After break_overloaded_bonds_system fires each step, no remaining live bond may have tension > adhesion_strength. This invariant proves the break system is firing every step and catching all overloaded bonds. A violation means break_overloaded_bonds missed a bond ΓÇö either it ran before solve_mortar (wrong schedule order) or retain() had a logic error.
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+thread '
+tests::constraint::tests::test_constraint_no_penetration_100_steps' (20432
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_no_block_below_floor
+  Category  : CONSTRAINT
+  Verdict   : PASS  (1/1 checks passed)
+  Duration  : 19ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4004  blocks=6  warmup_steps=0  measured_steps=200
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    floor_y=-0.5
+    tolerance=block centre must be ΓëÑ -0.1
+    invariant=floor constraint must prevent sinking
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] no_block_sinks_through_floor
+description : Over 200 steps, no block may have its centre below y=-0.1. The floor constraint in solve_constraints_system must keep all blocks above floor_y=-0.5 (centre at or above 0.0). A block at y=-0.1 is already suspicious ΓÇö it means the floor constraint is not being applied or is being applied with the wrong half-extent. Below y=-0.5 means complete floor penetration.
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+) panicked at 
+src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_constraint_no_penetration_100_steps
+  Category  : CONSTRAINT
+  Verdict   : FAIL  (0/1 checks passed)
+  Duration  : 9ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4001  blocks=5  warmup_steps=0  measured_steps=100
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    check_frequency=every step
+    max_allowed_penetration=0.01 world-units
+    material=mixed Wood/Steel/Stone
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] max_penetration_ever
+description : Over 100 physics steps, the maximum penetration depth between any two block pair must never exceed 0.01 world-units. This is the runtime constraint violation check: the XPBD solver must resolve all overlaps every single step. Penetration > 0.01 means the solver converged to a wrong answer for some configuration, and the RL agent would observe blocks inside each other.
+observed    : 0.966691
+expected    : Γëñ 0.010000
+tolerance   : strict upper bound
+         diagnosis   : Observed 0.966691 exceeds threshold 0.010000 by 0.956691. Context: max_penetration=0.966691  worst_step=36  worst_pair=(1,2)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ke_spike_detection_pillar_flying_regression
+  Category  : ENERGY
+  Verdict   : FAIL  (0/2 checks passed)
+  Duration  : 22ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5005  blocks=5  warmup_steps=300  measured_steps=150
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=settled steel pillar + side wood block spawned during measurement
+    regression=Bug 3b: mortar woke sleeping steel ΓåÆ gravity ΓåÆ overcorrection ΓåÆ pillar launched
+    spike_threshold=5.0 J sudden increase
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] no_pillar_launch_spikes
+description : After a side block is placed next to a settled steel pillar, total KE must not spike by more than 5.0 J in a single step. A spike of > 5.0 J means the pillar-flying regression (Bug 3b) has returned: mortar solver woke sleeping steel blocks ΓåÆ gravity integrated ΓåÆ over-correction ΓåÆ chain launch. Fix: BOND_WAKE_TENSION_THRESHOLD must suppress wake for tiny drift.
+observed    : 45
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 45. Spikes (first 3): [(2, 0.053464692, 10.813234), (6, 0.6743219, 11.347881), (7, 11.347881, 44.337753)]  max_ke=47.8130 J  pre_side_block_ke=3.5564 J
+  [FAIL] max_ke_reasonable
+description : Maximum KE during the measurement window must be < 10 J. A 1 kg Wood block falling 0.5 m generates Γëê 0.5 ├ù 1 ├ù (2├ù9.81├ù0.5)^0.5 Γëê 2.2 J. Values >> 10 J indicate the steel pillar was launched and contributed its 800 kg mass ├ù velocity┬▓ to the KE ΓÇö the pillar-flying bug.
+observed    : 47.812958
+expected    : Γëñ 15.000000
+tolerance   : strict upper bound
+         diagnosis   : Observed 47.812958 exceeds threshold 15.000000 by 32.812958. Context: max_ke_in_window = 47.8130 J
+
+  Γ£ù 2 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+
+thread 'tests::energy::tests::test_ke_spike_detection_pillar_flying_regression' (15240) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ke_spike_detection_pillar_flying_regression
+  Category  : ENERGY
+  Verdict   : FAIL  (0/2 checks passed)
+  Duration  : 22ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5005  blocks=5  warmup_steps=300  measured_steps=150
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=settled steel pillar + side wood block spawned during measurement
+    regression=Bug 3b: mortar woke sleeping steel ΓåÆ gravity ΓåÆ overcorrection ΓåÆ pillar launched
+    spike_threshold=5.0 J sudden increase
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] no_pillar_launch_spikes
+description : After a side block is placed next to a settled steel pillar, total KE must not spike by more than 5.0 J in a single step. A spike of > 5.0 J means the pillar-flying regression (Bug 3b) has returned: mortar solver woke sleeping steel blocks ΓåÆ gravity integrated ΓåÆ over-correction ΓåÆ chain launch. Fix: BOND_WAKE_TENSION_THRESHOLD must suppress wake for tiny drift.
+observed    : 45
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 45. Spikes (first 3): [(2, 0.053464692, 10.813234), (6, 0.6743219, 11.347881), (7, 11.347881, 44.337753)]  max_ke=47.8130 J  pre_side_block_ke=3.5564 J
+  [FAIL] max_ke_reasonable
+description : Maximum KE during the measurement window must be < 10 J. A 1 kg Wood block falling 0.5 m generates Γëê 0.5 ├ù 1 ├ù (2├ù9.81├ù0.5)^0.5 Γëê 2.2 J. Values >> 10 J indicate the steel pillar was launched and contributed its 800 kg mass ├ù velocity┬▓ to the KE ΓÇö the pillar-flying bug.
+observed    : 47.812958
+expected    : Γëñ 15.000000
+tolerance   : strict upper bound
+         diagnosis   : Observed 47.812958 exceeds threshold 15.000000 by 32.812958. Context: max_ke_in_window = 47.8130 J
+
+  Γ£ù 2 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::energy::tests::test_ke_dissipation_rate_after_impact ... ok
+test tests::collision::tests::test_aabb_cube_on_cube_stack ... ok
+test tests::constraint::tests::test_bond_tension_never_exceeds_adhesion_before_break ... ok
+test tests::constraint::tests::test_no_block_below_floor ... ok
+test tests::constraint::tests::test_constraint_no_penetration_100_steps ... FAILED
+test tests::collision::tests::test_cube_on_wedge_slides_not_launches ... ok
+test tests::collision::tests::test_aabb_cube_on_static_floor ... FAILED
+test tests::energy::tests::test_ke_spike_detection_pillar_flying_regression ... FAILED
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_restitution_energy_loss
+  Category  : STABILITY
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 1ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2007  blocks=2  warmup_steps=0  measured_steps=120
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    drop_height=4.0
+    wood_restitution=0.0 (dead stop)
+    steel_restitution=0.05 (tiny bounce)
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] wood_no_bounce_speed
+description : Wood block (restitution=0.0) must not bounce. After 120 steps the speed must be near zero. Persistent speed means restitution is incorrectly non-zero for Wood, or the contact resolution is generating artificial upward velocity.
+observed    : 0.000000
+expected    : Γëñ 0.150000
+tolerance   : strict upper bound
+  [PASS] wood_settled_on_floor
+description : Wood block must have settled at floor level (y < 0.5). y > 0.5 means the block is still bouncing or floating.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stability::tests::test_restitution_energy_loss ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_y_velocity_decreases_on_dead_bounce
+  Category  : ENERGY
+  Verdict   : PASS  (1/1 checks passed)
+  Duration  : 2ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5006  blocks=1  warmup_steps=0  measured_steps=200
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    material=Wood (restitution=0.0)
+    expected=Y velocity magnitude decreases monotonically after each bounce
+    physics_basis=restitution=0 ΓåÆ normal velocity component zeroed on contact
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] block_settled_after_bounces
+description : Wood block must be completely settled (|vy| < 0.1 m/s) after 200 steps. Persistent Y velocity means the dead-bounce (restitution=0.0) is not zeroing the normal velocity component on floor contact.
+observed    : 0.000000
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_total_energy_not_created_on_collision
+  Category  : ENERGY
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 5ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5004  blocks=2  warmup_steps=0  measured_steps=80
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    block_a_vel=4.0 m/s on X axis
+    block_b_vel=0.0 (stationary)
+    invariant=KE_post Γëñ KE_pre + gravity_work
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] no_energy_creation_spikes
+description : Total KE must not increase by more than 5.0 J per step (the maximum gravitational PE converted to KE for a 1 kg block falling at g=9.81). Larger increases indicate the solver is creating kinetic energy ΓÇö either the velocity derivation amplified a correction, or the position update is adding spurious displacement.
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+  [PASS] final_ke_less_than_initial
+description : After 80 steps (blocks have collided and settled), final KE must be less than initial KE. The collision and damping must have dissipated energy. If final_ke > initial_ke, the system is net-positive on energy ΓÇö a physics correctness failure.
+observed    : 0.000000
+expected    : Γëñ 9.000000
+tolerance   : strict upper bound
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ke_zero_in_static_world
+  Category  : ENERGY
+  Verdict   : PASS  (1/1 checks passed)
+  Duration  : 5ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5002  blocks=5  warmup_steps=0  measured_steps=100
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    all_blocks_static=true (inv_mass=0)
+    expected_ke=0.0 J (exactly)
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] static_world_ke_always_zero
+description : A world containing only static blocks (inv_mass=0) must have KE=0 at every step. Static blocks have velocity=Vec3::ZERO always (integrate_system skips them). Any KE > 1e-10 means a static block was incorrectly given velocity ΓÇö critical correctness failure.
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::energy::tests::test_total_energy_not_created_on_collision ... ok
+test tests::energy::tests::test_y_velocity_decreases_on_dead_bounce ... ok
+test tests::energy::tests::test_ke_zero_in_static_world ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_single_block_reaches_sleep
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 1ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2001  blocks=1  warmup_steps=0  measured_steps=240
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    drop_height=3.0
+    material=Wood
+    linear_sleep_speed=0.20 m/s
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] sleep_flag_engaged
+description : A single block dropped from height 3.0 must reach is_sleeping=true within 240 steps (4 seconds simulated). Failure means: (a) LINEAR_SLEEP_SPEED threshold is set too low, or (b) damping is not removing energy fast enough, or (c) the floor contact is producing oscillations that prevent sleep.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : is_sleeping=false speed=0.0000 pos_y=-0.0000
+  [PASS] speed_below_sleep_threshold
+description : Velocity magnitude must be at or below LINEAR_SLEEP_SPEED=0.20 m/s. This is a necessary condition for sleep to engage. If speed > 0.20 but sleep=false, the sleep check is not running on every contact step.
+observed    : 0.000000
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+  [PASS] block_has_landed
+description : After 240 steps the block must have hit the floor and settled. pos_y > 1.0 indicates the block is still falling ΓÇö gravity integration or the floor constraint is broken.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_sleep_wakes_on_impact
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 3ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2004  blocks=2  warmup_steps=300  measured_steps=60
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=sleeping block struck by falling block
+    wake_mechanism=WAKE_CORRECTION_EPS in solve_constraints
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] block_a_sleeping_before_impact
+description : Block A must be sleeping before the impact block is spawned. If it is not sleeping at this point, the warmup steps are insufficient or the sleep system is broken.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : Block A not sleeping after 300 warmup steps ΓÇö test precondition failed
+  [PASS] block_b_fell_toward_a
+description : Block B must have fallen from y=4.0 toward Block A. If block_b_pos.y is still near 4.0, the spawning or gravity failed.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] block_a_not_ejected
+description : Block A must not be ejected upward by the impact. pos_y > 2.0 indicates Block A was launched ΓÇö the collision response applied too much upward correction to the lower block.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::stability::tests::test_single_block_reaches_sleep' (21064) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_single_block_reaches_sleep
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 1ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2001  blocks=1  warmup_steps=0  measured_steps=240
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    drop_height=3.0
+    material=Wood
+    linear_sleep_speed=0.20 m/s
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] sleep_flag_engaged
+description : A single block dropped from height 3.0 must reach is_sleeping=true within 240 steps (4 seconds simulated). Failure means: (a) LINEAR_SLEEP_SPEED threshold is set too low, or (b) damping is not removing energy fast enough, or (c) the floor contact is producing oscillations that prevent sleep.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : is_sleeping=false speed=0.0000 pos_y=-0.0000
+  [PASS] speed_below_sleep_threshold
+description : Velocity magnitude must be at or below LINEAR_SLEEP_SPEED=0.20 m/s. This is a necessary condition for sleep to engage. If speed > 0.20 but sleep=false, the sleep check is not running on every contact step.
+observed    : 0.000000
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+  [PASS] block_has_landed
+description : After 240 steps the block must have hit the floor and settled. pos_y > 1.0 indicates the block is still falling ΓÇö gravity integration or the floor constraint is broken.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::stability::tests::test_sleep_wakes_on_impact' (20724) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_sleep_wakes_on_impact
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 3ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2004  blocks=2  warmup_steps=300  measured_steps=60
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=sleeping block struck by falling block
+    wake_mechanism=WAKE_CORRECTION_EPS in solve_constraints
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] block_a_sleeping_before_impact
+description : Block A must be sleeping before the impact block is spawned. If it is not sleeping at this point, the warmup steps are insufficient or the sleep system is broken.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : Block A not sleeping after 300 warmup steps ΓÇö test precondition failed
+  [PASS] block_b_fell_toward_a
+description : Block B must have fallen from y=4.0 toward Block A. If block_b_pos.y is still near 4.0, the spawning or gravity failed.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] block_a_not_ejected
+description : Block A must not be ejected upward by the impact. pos_y > 2.0 indicates Block A was launched ΓÇö the collision response applied too much upward correction to the lower block.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stability::tests::test_single_block_reaches_sleep ... FAILED
+test tests::stability::tests::test_sleep_wakes_on_impact ... FAILED
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_steel_pair_no_vibration
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 8ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2006  blocks=2  warmup_steps=200  measured_steps=300
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    material=Steel (both blocks)
+    scenario=two adjacent steel blocks
+    regression=Bug 3a: steel-steel mortar bond caused infinite vibration
+    compliance_fix=BASE_BOND_COMPLIANCE_FACTOR * inv_mass_sum
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] steel_a_not_vibrating
+description : Steel block A must have speed Γëñ 0.05 m/s after 500 total steps. Higher speed indicates the mass-proportional compliance fix in mortar.rs has been broken and the oscillation has returned. Root cause: compliance = BASE_COMPLIANCE ├ù inv_mass_sum must be used instead of a fixed compliance constant.
+observed    : 0.000000
+expected    : Γëñ 0.050000
+tolerance   : strict upper bound
+  [PASS] steel_b_not_vibrating
+description : Steel block B speed must also be Γëñ 0.05 m/s.
+observed    : 0.000000
+expected    : Γëñ 0.050000
+tolerance   : strict upper bound
+  [FAIL] steel_pair_both_sleeping
+description : Both steel blocks must be sleeping after 500 steps. is_sleeping=false with speed near zero means the mortar solver is waking them via BOND_WAKE_TENSION_THRESHOLD being set too low.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : steel_a sleeping=false speed=0.000000  steel_b sleeping=false speed=0.000000  max=0.000000
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::stability::tests::test_steel_pair_no_vibration' (21164) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_steel_pair_no_vibration
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 8ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2006  blocks=2  warmup_steps=200  measured_steps=300
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    material=Steel (both blocks)
+    scenario=two adjacent steel blocks
+    regression=Bug 3a: steel-steel mortar bond caused infinite vibration
+    compliance_fix=BASE_BOND_COMPLIANCE_FACTOR * inv_mass_sum
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] steel_a_not_vibrating
+description : Steel block A must have speed Γëñ 0.05 m/s after 500 total steps. Higher speed indicates the mass-proportional compliance fix in mortar.rs has been broken and the oscillation has returned. Root cause: compliance = BASE_COMPLIANCE ├ù inv_mass_sum must be used instead of a fixed compliance constant.
+observed    : 0.000000
+expected    : Γëñ 0.050000
+tolerance   : strict upper bound
+  [PASS] steel_b_not_vibrating
+description : Steel block B speed must also be Γëñ 0.05 m/s.
+observed    : 0.000000
+expected    : Γëñ 0.050000
+tolerance   : strict upper bound
+  [FAIL] steel_pair_both_sleeping
+description : Both steel blocks must be sleeping after 500 steps. is_sleeping=false with speed near zero means the mortar solver is waking them via BOND_WAKE_TENSION_THRESHOLD being set too low.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : steel_a sleeping=false speed=0.000000  steel_b sleeping=false speed=0.000000  max=0.000000
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stability::tests::test_steel_pair_no_vibration ... FAILED
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_lateral_side_drag_regression
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 12ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2005  blocks=3  warmup_steps=200  measured_steps=100
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=2-high wood pillar + 1 side-placed wood block
+    regression=Bug #3: pillar was dragged to ground level by side block
+    lateral_anchor_cap=SETTLED_ANCHOR_SHARE_CAP = 0.0
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] bottom_block_y_stable
+description : Bottom pillar block Y position must not change by more than 0.3 units after the side block is placed. Larger change = lateral drag regression (Bug #3 returned). The SETTLED_ANCHOR_SHARE_CAP should prevent the settled pillar from absorbing the side block's impact correction.
+observed    : 0.000000
+expected    : Γëñ 0.300000
+tolerance   : strict upper bound
+  [PASS] top_block_y_stable
+description : Top pillar block Y position must not change by more than 0.3 units. The side block should not drag the entire pillar sideways or downward.
+observed    : 0.000000
+expected    : Γëñ 0.300000
+tolerance   : strict upper bound
+  [FAIL] side_block_formed_bond
+description : The side Wood block should have formed at least 1 mortar bond with the pillar. bond_count=0 after placement means try_register_bonds failed to detect the adjacency.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : bond_count = 0 (expected ΓëÑ 1 ΓÇö side block should bond to pillar)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::stability::tests::test_lateral_side_drag_regression' (3104) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_lateral_side_drag_regression
+  Category  : STABILITY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 12ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2005  blocks=3  warmup_steps=200  measured_steps=100
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=2-high wood pillar + 1 side-placed wood block
+    regression=Bug #3: pillar was dragged to ground level by side block
+    lateral_anchor_cap=SETTLED_ANCHOR_SHARE_CAP = 0.0
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] bottom_block_y_stable
+description : Bottom pillar block Y position must not change by more than 0.3 units after the side block is placed. Larger change = lateral drag regression (Bug #3 returned). The SETTLED_ANCHOR_SHARE_CAP should prevent the settled pillar from absorbing the side block's impact correction.
+observed    : 0.000000
+expected    : Γëñ 0.300000
+tolerance   : strict upper bound
+  [PASS] top_block_y_stable
+description : Top pillar block Y position must not change by more than 0.3 units. The side block should not drag the entire pillar sideways or downward.
+observed    : 0.000000
+expected    : Γëñ 0.300000
+tolerance   : strict upper bound
+  [FAIL] side_block_formed_bond
+description : The side Wood block should have formed at least 1 mortar bond with the pillar. bond_count=0 after placement means try_register_bonds failed to detect the adjacency.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : bond_count = 0 (expected ΓëÑ 1 ΓÇö side block should bond to pillar)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ke_monotone_after_settle
+  Category  : ENERGY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 41ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5001  blocks=5  warmup_steps=300  measured_steps=100
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    law=KE[t] Γëñ KE[t-1] once settled (damped system)
+    damping_coefficient=POSITION_VELOCITY_DAMPING=0.94
+    material=Wood
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] no_ke_increases_after_settle
+description : After blocks settle, total KE must not increase between steps. This is the energy conservation law for a damped system: without new external forces, energy can only be dissipated (friction, restitution) or stay constant (perfect elastic bounce). KE increases indicate the solver is creating energy ΓÇö a critical correctness failure. Tolerance = 0.01 J to account for float rounding.
+observed    : 44
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 44. Energy increases (first 5): [(4, 0.00038426148, 0.013452524), (5, 0.013452524, 0.05845396), (6, 0.05845396, 0.1414205), (7, 0.1414205, 0.25359064), (12, 0.0039415215, 0.024764653)]  ke_at_settle=0.173841  max_in_window=0.816380  final_ke=0.003838
+  [PASS] ke_final_less_than_ke_initial
+description : Final KE (after 100 measurement steps) must be Γëñ initial KE at the start of the measurement window. The damped system must have dissipated all remaining energy to zero or near-zero.
+observed    : 0.003838
+expected    : Γëñ 0.223841
+tolerance   : strict upper bound
+  [PASS] ke_approaches_zero
+description : After 300 warmup + 100 measurement steps, total KE must be near zero (< 0.5 J). Persistent KE means blocks are still moving ΓÇö the damping or sleep system is failing to fully dissipate energy.
+observed    : 0.003838
+expected    : Γëñ 0.500000
+tolerance   : strict upper bound
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::energy::tests::test_ke_monotone_after_settle' (15416) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ke_monotone_after_settle
+  Category  : ENERGY
+  Verdict   : FAIL  (2/3 checks passed)
+  Duration  : 41ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=5001  blocks=5  warmup_steps=300  measured_steps=100
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    law=KE[t] Γëñ KE[t-1] once settled (damped system)
+    damping_coefficient=POSITION_VELOCITY_DAMPING=0.94
+    material=Wood
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] no_ke_increases_after_settle
+description : After blocks settle, total KE must not increase between steps. This is the energy conservation law for a damped system: without new external forces, energy can only be dissipated (friction, restitution) or stay constant (perfect elastic bounce). KE increases indicate the solver is creating energy ΓÇö a critical correctness failure. Tolerance = 0.01 J to account for float rounding.
+observed    : 44
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 44. Energy increases (first 5): [(4, 0.00038426148, 0.013452524), (5, 0.013452524, 0.05845396), (6, 0.05845396, 0.1414205), (7, 0.1414205, 0.25359064), (12, 0.0039415215, 0.024764653)]  ke_at_settle=0.173841  max_in_window=0.816380  final_ke=0.003838
+  [PASS] ke_final_less_than_ke_initial
+description : Final KE (after 100 measurement steps) must be Γëñ initial KE at the start of the measurement window. The damped system must have dissipated all remaining energy to zero or near-zero.
+observed    : 0.003838
+expected    : Γëñ 0.223841
+tolerance   : strict upper bound
+  [PASS] ke_approaches_zero
+description : After 300 warmup + 100 measurement steps, total KE must be near zero (< 0.5 J). Persistent KE means blocks are still moving ΓÇö the damping or sleep system is failing to fully dissipate energy.
+observed    : 0.003838
+expected    : Γëñ 0.500000
+tolerance   : strict upper bound
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stability::tests::test_lateral_side_drag_regression ... FAILED
+test tests::energy::tests::test_ke_monotone_after_settle ... FAILED
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_scaffold_stress_capacity_is_low
+  Category  : STRESS
+  Verdict   : PASS  (3/3 checks passed)
+  Duration  : 17ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=3004  blocks=2  warmup_steps=0  measured_steps=400
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=scaffold block under 1 Wood block
+    scaffold_capacity_multiplier=5├ù own weight
+    wood_capacity_multiplier=15├ù own weight
+    expected=scaffold.stress_norm >> wood.stress_norm
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] scaffold_higher_stress_than_wood
+description : Scaffold block supporting 1 Wood block must have higher stress_normalized than the top Wood block (which supports nothing). scaffold_norm should be around 0.4 (1 kg / 2.5 kg capacity). If scaffold_norm Γëñ wood_norm, the scaffold capacity multiplier (5├ù) is not being applied correctly ΓÇö check stress_capacity_for_material().
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] scaffold_stress_meaningful
+description : Scaffold supporting 1 kg (Wood block) must show meaningful stress ΓëÑ 0.2. Low stress indicates the capacity formula is using the wrong multiplier or the scaffold mass is wrong.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] scaffold_norm_in_range
+description : Scaffold stress_normalized must be in [0.0, 1.0].
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stress_tests::tests::test_scaffold_stress_capacity_is_low ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_floor_support_flag_propagates
+  Category  : STRESS
+  Verdict   : FAIL  (0/1 checks passed)
+  Duration  : 29ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=3005  blocks=4  warmup_steps=0  measured_steps=400
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    stack_height=4 blocks on ground
+    invariant=all 4 blocks must be floor-supported
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] all_grounded_blocks_floor_supported
+description : All 4 blocks in a grounded stack must have is_supported_from_below=true. An unsupported block in a grounded stack means the floor support propagation pass did not traverse far enough up the stack ΓÇö check the below_is_supported logic in compute_stress_system.
+observed    : 3
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 3. Unsupported block indices: [1, 2, 3]  (all should be floor-supported)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::stress_tests::tests::test_floor_support_flag_propagates' (20500) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_floor_support_flag_propagates
+  Category  : STRESS
+  Verdict   : FAIL  (0/1 checks passed)
+  Duration  : 29ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=3005  blocks=4  warmup_steps=0  measured_steps=400
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    stack_height=4 blocks on ground
+    invariant=all 4 blocks must be floor-supported
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] all_grounded_blocks_floor_supported
+description : All 4 blocks in a grounded stack must have is_supported_from_below=true. An unsupported block in a grounded stack means the floor support propagation pass did not traverse far enough up the stack ΓÇö check the below_is_supported logic in compute_stress_system.
+observed    : 3
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 3. Unsupported block indices: [1, 2, 3]  (all should be floor-supported)
+
+  Γ£ù 1 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stress_tests::tests::test_floor_support_flag_propagates ... FAILED
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_no_nan_or_inf_positions
+  Category  : CONSTRAINT
+  Verdict   : PASS  (1/1 checks passed)
+  Duration  : 64ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4005  blocks=10  warmup_steps=0  measured_steps=300
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    scenario=high-velocity spawns to stress numerical stability
+    invariant=all position and velocity components are finite
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] no_nan_or_inf
+description : No block position or velocity component may be NaN or Inf over 300 steps. NaN propagates silently through all subsequent math: the spatial grid lookup returns wrong neighbors, the RL observation buffer contains garbage, and the neural network gradient becomes NaN. A single NaN event is a complete simulation integrity failure.
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::constraint::tests::test_no_nan_or_inf_positions ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_constraint_no_penetration_1000_steps
+  Category  : CONSTRAINT
+  Verdict   : FAIL  (0/2 checks passed)
+  Duration  : 65ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4002  blocks=8  warmup_steps=0  measured_steps=1000
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    check_frequency=every step
+    max_allowed_penetration=0.015 world-units (slightly wider ΓÇö settle dynamics)
+    full_pipeline=mortar + stress included
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] zero_violation_steps
+description : Over 1000 physics steps, there must be zero steps where any block pair penetrates by more than 0.015 world-units. A single violation step means the XPBD solver produced a wrong answer on that step ΓÇö the RL agent received a corrupt observation and will learn incorrect physics. Every violation step is a data quality failure.
+observed    : 2
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 2. violation_steps (first 5): [(88, 0.018002331), (89, 0.018002331)]  max_penetration=0.018002
+  [FAIL] max_penetration_1000_steps
+description : Maximum penetration across 1000 steps must be below 0.015. This guards against transient spikes that the violation-step count might miss if the tolerance is set exactly at the spike value.
+observed    : 0.018002
+expected    : Γëñ 0.015000
+tolerance   : strict upper bound
+         diagnosis   : Observed 0.018002 exceeds threshold 0.015000 by 0.003002. Context: max_penetration = 0.018002
+
+  Γ£ù 2 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::constraint::tests::test_constraint_no_penetration_1000_steps' (16108) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_constraint_no_penetration_1000_steps
+  Category  : CONSTRAINT
+  Verdict   : FAIL  (0/2 checks passed)
+  Duration  : 65ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4002  blocks=8  warmup_steps=0  measured_steps=1000
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    check_frequency=every step
+    max_allowed_penetration=0.015 world-units (slightly wider ΓÇö settle dynamics)
+    full_pipeline=mortar + stress included
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] zero_violation_steps
+description : Over 1000 physics steps, there must be zero steps where any block pair penetrates by more than 0.015 world-units. A single violation step means the XPBD solver produced a wrong answer on that step ΓÇö the RL agent received a corrupt observation and will learn incorrect physics. Every violation step is a data quality failure.
+observed    : 2
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 2. violation_steps (first 5): [(88, 0.018002331), (89, 0.018002331)]  max_penetration=0.018002
+  [FAIL] max_penetration_1000_steps
+description : Maximum penetration across 1000 steps must be below 0.015. This guards against transient spikes that the violation-step count might miss if the tolerance is set exactly at the spike value.
+observed    : 0.018002
+expected    : Γëñ 0.015000
+tolerance   : strict upper bound
+         diagnosis   : Observed 0.018002 exceeds threshold 0.015000 by 0.003002. Context: max_penetration = 0.018002
+
+  Γ£ù 2 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::constraint::tests::test_constraint_no_penetration_1000_steps ... FAILED
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_no_penetration_in_settled_pillar
+  Category  : COLLISION
+  Verdict   : PASS  (6/6 checks passed)
+  Duration  : 76ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=1008  blocks=5  warmup_steps=1000  measured_steps=0
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    pillar_height=5 blocks
+    max_allowed_penetration=0.01 world-units
+    material=Wood
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] max_penetration_depth
+description : After 1000 steps, no two blocks in the pillar should overlap by more than 0.01 world-units (1% of a block width). Penetration > 0.01 means the XPBD solver failed to resolve all overlaps ΓÇö the agent would observe blocks inside each other and learn incorrect physics.
+observed    : 0.006418
+expected    : Γëñ 0.010000
+tolerance   : strict upper bound
+  [PASS] pillar_block_y_position
+description : Pillar block 0 must rest at approximately y=0.0. Large deviation indicates a collapse or floating gap.
+observed    : -0.000000
+expected    : 0.000000 ┬▒ 0.150000
+tolerance   : ╬╡ = 0.150000
+  [PASS] pillar_block_y_position
+description : Pillar block 1 must rest at approximately y=1.0. Large deviation indicates a collapse or floating gap.
+observed    : 0.999988
+expected    : 1.000000 ┬▒ 0.150000
+tolerance   : ╬╡ = 0.150000
+  [PASS] pillar_block_y_position
+description : Pillar block 2 must rest at approximately y=2.0. Large deviation indicates a collapse or floating gap.
+observed    : 1.993570
+expected    : 2.000000 ┬▒ 0.150000
+tolerance   : ╬╡ = 0.150000
+  [PASS] pillar_block_y_position
+description : Pillar block 3 must rest at approximately y=3.0. Large deviation indicates a collapse or floating gap.
+observed    : 2.993570
+expected    : 3.000000 ┬▒ 0.150000
+tolerance   : ╬╡ = 0.150000
+  [PASS] pillar_block_y_position
+description : Pillar block 4 must rest at approximately y=4.0. Large deviation indicates a collapse or floating gap.
+observed    : 3.993567
+expected    : 4.000000 ┬▒ 0.150000
+tolerance   : ╬╡ = 0.150000
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::collision::tests::test_no_penetration_in_settled_pillar ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_stress_increases_with_load
+  Category  : STRESS
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 53ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=3003  blocks=6  warmup_steps=0  measured_steps=500
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    material=Steel (uniform mass for clean test)
+    invariant=bottom.stress_normalized > top.stress_normalized
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] bottom_stress_greater_than_top
+description : Bottom block must have higher stress_normalized than the top block. Bottom supports 5 blocks above it; top supports 0. bottom_norm Γëñ top_norm means the propagation direction is wrong or the capacity formula is not working for Steel.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] top_block_low_stress
+description : Top block (nothing above it) must have low stress_normalized Γëñ 0.1. High stress_normalized on the top block means phantom loads are being assigned to blocks with no blocks above them.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_static_blocks_position_invariant
+  Category  : CONSTRAINT
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 88ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=4006  blocks=4  warmup_steps=0  measured_steps=500
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    static_count=2 static blocks
+    dynamic_count=many dynamic blocks
+    max_static_displacement=1e-4 world-units
+    invariant=inv_mass=0 ΓåÆ correction_share=0 ΓåÆ zero displacement
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] static_a_zero_displacement
+description : Static block A must not move more than 1e-4 world-units over 500 steps, regardless of how many dynamic blocks collide with it. The XPBD correction share for inv_mass=0 is mathematically 0. Any displacement > 1e-4 means floating-point error has accumulated in the correction accumulation, or the static constraint is not being checked before applying corrections.
+observed    : 0.000000
+expected    : Γëñ 0.000100
+tolerance   : strict upper bound
+  [PASS] static_b_zero_displacement
+description : Static block B must also not move over 500 steps.
+observed    : 0.000000
+expected    : Γëñ 0.000100
+tolerance   : strict upper bound
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stress_tests::tests::test_stress_increases_with_load ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_single_column_stress_propagation
+  Category  : STRESS
+  Verdict   : PASS  (6/6 checks passed)
+  Duration  : 55ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=3001  blocks=5  warmup_steps=0  measured_steps=600
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    material=Wood (1 kg each)
+    pillar_height=5 blocks
+    expected_bottom_supported_mass=~4.0 kg
+    expected_top_supported_mass=~0.0 kg
+
+test tests::constraint::tests::test_static_blocks_position_invariant ... ok
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] bottom_block_has_stress_entry
+description : Bottom block must have an entry in StressMap. Missing entry means compute_stress_system did not process this entity.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] bottom_supported_mass
+description : Bottom block must support the mass of all 4 blocks above it. Wood mass = 1 kg ├ù 4 blocks = 4 kg. supported_mass < 3.0 ΓåÆ propagation is not traversing all upper blocks. supported_mass > 5.0 ΓåÆ blocks are being double-counted.
+observed    : 4.000000
+expected    : 4.000000 ┬▒ 0.500000
+tolerance   : ╬╡ = 0.500000
+  [PASS] bottom_is_floor_supported
+description : The bottom block of the pillar must be marked as floor-supported since it rests directly on the ground plane (y Γëê 0.0).
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] bottom_stress_in_range
+description : stress_normalized must be in [0.0, 1.0]. Values outside this range indicate a capacity calculation error (divide by zero or negative capacity).
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] top_supported_mass
+description : Top block has nothing above it ΓÇö supported_mass must be ~0.0 kg. Non-zero value means a phantom block is being counted, or the traversal direction is reversed (propagating upward instead of downward).
+observed    : 0.000000
+expected    : 0.000000 ┬▒ 0.300000
+tolerance   : ╬╡ = 0.300000
+  [PASS] stress_monotonic_top_to_bottom
+description : Supported mass must decrease (or stay equal) from bottom to top. A block higher in the stack supports fewer blocks above it. Non-monotonic sequence indicates the pass 2 ordering is wrong ΓÇö entities are not being processed top-down.
+observed    : true
+expected    : true
+tolerance   : exact boolean
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stress_tests::tests::test_single_column_stress_propagation ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_stress_normalized_range
+  Category  : STRESS
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 62ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=3002  blocks=8  warmup_steps=0  measured_steps=400
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    materials=mixed: Wood, Steel, Stone
+    invariant=0.0 Γëñ stress_normalized Γëñ 1.0 for all blocks
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] all_stress_values_in_range
+description : All stress_normalized values must be in [0.0, 1.0]. Values < 0 indicate negative load (invalid). Values > 1 mean the clamp in compute_stress_system is missing or the capacity formula returned a negative/zero capacity (divide-by-zero with zero-mass block).
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+  [PASS] all_blocks_have_stress_entry
+description : Every dynamic block must have an entry in StressMap. Missing entries indicate compute_stress_system skipped some entities ΓÇö check that the query includes all dynamic voxels.
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stress_tests::tests::test_stress_normalized_range ... ok
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ten_block_pillar_no_jitter
+  Category  : STABILITY
+  Verdict   : FAIL  (0/3 checks passed)
+  Duration  : 92ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2002  blocks=10  warmup_steps=0  measured_steps=500
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    pillar_height=10 blocks
+    material=Wood
+    jitter_threshold=LINEAR_SLEEP_SPEED = 0.20 m/s
+    canonical_requirement=From project docs: 10-block pillar must not jitter
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] zero_jittering_blocks
+description : Every block in the 10-block pillar must have speed Γëñ 0.20 m/s after 500 steps. Jittering blocks indicate the sleep system is not engaging for stacked inter-block contacts, or the mortar solver is waking sleeping blocks unnecessarily (pillar flying bug).
+observed    : 3
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 3. Jittering blocks: [(2, 0.6326857), (4, 0.39404866), (8, 0.34396932)]  Max speed in pillar: 0.632686 m/s
+  [FAIL] pillar_max_speed
+description : Maximum speed of any block in the pillar must be below 0.20 m/s. This is the quantitative equivalent of 'no jitter'.
+observed    : 0.632686
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+         diagnosis   : Observed 0.632686 exceeds threshold 0.200000 by 0.432686. Context: max_speed = 0.632686 m/s across all 10 blocks
+  [FAIL] most_blocks_sleeping
+description : At least 8 of 10 pillar blocks must be in sleep state after 500 steps. Fewer sleeping blocks indicates persistent energy injection ΓÇö likely a mortar solve overcorrection or floor constraint oscillation.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : 3/10 blocks sleeping. Awake blocks may indicate BOND_WAKE_TENSION_THRESHOLD is too sensitive.
+
+  Γ£ù 3 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+
+thread 'tests::stability::tests::test_ten_block_pillar_no_jitter' (15964) panicked at src\tests\mod.rs:376:13:
+Physics validation FAILED ΓÇö see audit log above.
+
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö FAIL                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_ten_block_pillar_no_jitter
+  Category  : STABILITY
+  Verdict   : FAIL  (0/3 checks passed)
+  Duration  : 92ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2002  blocks=10  warmup_steps=0  measured_steps=500
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    pillar_height=10 blocks
+    material=Wood
+    jitter_threshold=LINEAR_SLEEP_SPEED = 0.20 m/s
+    canonical_requirement=From project docs: 10-block pillar must not jitter
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [FAIL] zero_jittering_blocks
+description : Every block in the 10-block pillar must have speed Γëñ 0.20 m/s after 500 steps. Jittering blocks indicate the sleep system is not engaging for stacked inter-block contacts, or the mortar solver is waking sleeping blocks unnecessarily (pillar flying bug).
+observed    : 3
+expected    : 0
+tolerance   : exact integer
+         diagnosis   : Expected exactly 0 but got 3. Jittering blocks: [(2, 0.6326857), (4, 0.39404866), (8, 0.34396932)]  Max speed in pillar: 0.632686 m/s
+  [FAIL] pillar_max_speed
+description : Maximum speed of any block in the pillar must be below 0.20 m/s. This is the quantitative equivalent of 'no jitter'.
+observed    : 0.632686
+expected    : Γëñ 0.200000
+tolerance   : strict upper bound
+         diagnosis   : Observed 0.632686 exceeds threshold 0.200000 by 0.432686. Context: max_speed = 0.632686 m/s across all 10 blocks
+  [FAIL] most_blocks_sleeping
+description : At least 8 of 10 pillar blocks must be in sleep state after 500 steps. Fewer sleeping blocks indicates persistent energy injection ΓÇö likely a mortar solve overcorrection or floor constraint oscillation.
+observed    : false
+expected    : true
+tolerance   : exact boolean
+         diagnosis   : 3/10 blocks sleeping. Awake blocks may indicate BOND_WAKE_TENSION_THRESHOLD is too sensitive.
+
+  Γ£ù 3 check(s) FAILED ΓÇö see diagnosis fields above.
+  Action: fix the physics bug identified, re-run `cargo test`, confirm all checks reach PASS before proceeding to Phase II.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stability::tests::test_ten_block_pillar_no_jitter ... FAILED
+
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ  BABEL PHYSICS AUDIT ΓÇö PASS                                   Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+  Test      : test_pillar_stable_height_preserved
+  Category  : STABILITY
+  Verdict   : PASS  (2/2 checks passed)
+  Duration  : 96ms
+
+  ΓöÇΓöÇ Simulation Parameters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  seed=2003  blocks=10  warmup_steps=0  measured_steps=600
+  dt=0.016666668s  gravity_y=-9.81  solver_iters=10  floor_y=-0.5
+    min_required_height_span=8.5 world-units
+    material=Wood
+
+  ΓöÇΓöÇ Check Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  [PASS] pillar_height_span_sufficient
+description : 10-block pillar must span at least 8.5 world-units from bottom to top block centre. Lower span means blocks have collapsed through each other (penetration) or the pillar fell over (stability failure).
+observed    : true
+expected    : true
+tolerance   : exact boolean
+  [PASS] no_blocks_below_floor
+description : No block should have a Y position below -0.1 (floor is at -0.5, block centre must be at 0.0 or above). A block below -0.1 has sunk through the floor or been ejected downward.
+observed    : 0
+expected    : 0
+tolerance   : exact integer
+
+  Γ£ô All checks passed. Engine behaviour is verified for this scenario.
+  ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+test tests::stability::tests::test_pillar_stable_height_preserved ... ok
+
+failures:
+
+failures:
+    tests::collision::tests::test_aabb_cube_on_static_floor
+    tests::collision::tests::test_aabb_heavy_vs_light_mass_sharing
+    tests::collision::tests::test_aabb_two_dynamic_equal_mass_collision
+    tests::constraint::tests::test_constraint_no_penetration_1000_steps
+    tests::constraint::tests::test_constraint_no_penetration_100_steps
+    tests::energy::tests::test_ke_monotone_after_settle
+    tests::energy::tests::test_ke_spike_detection_pillar_flying_regression
+    tests::stability::tests::test_lateral_side_drag_regression
+    tests::stability::tests::test_single_block_reaches_sleep
+    tests::stability::tests::test_sleep_wakes_on_impact
+    tests::stability::tests::test_steel_pair_no_vibration
+    tests::stability::tests::test_ten_block_pillar_no_jitter
+    tests::stress_tests::tests::test_floor_support_flag_propagates
+
+test result: FAILED. 19 passed; 13 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+error: test failed, to rerun pass `--lib`
