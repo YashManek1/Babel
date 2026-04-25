@@ -235,6 +235,13 @@ pub struct Voxel {
     /// Only used for Sphere shape: the sphere's radius in world units
     pub sphere_radius: f32,
 
+    /// Half-size of box-like shapes in world units.
+    ///
+    /// Normal construction blocks use 0.5 on each axis, while humanoid body
+    /// segments use slimmer anatomical boxes. Keeping this in Voxel makes
+    /// collision, floor contact, and rendering agree on the same physical size.
+    pub half_extents: Vec3,
+
     // =========================================================================
     // LEARNING TOPIC: Inverse Mass — The Physics Engine's Core Trick
     // ================================================================
@@ -384,6 +391,7 @@ impl Voxel {
             velocity: Vec3::ZERO,
             shape,
             sphere_radius: 0.5,
+            half_extents: Vec3::splat(0.5),
             inv_mass: if is_static { 0.0 } else { dynamic_inv_mass },
             friction: material.friction(),
             restitution: material.restitution(),
@@ -422,6 +430,20 @@ impl Voxel {
     ) -> Self {
         let mut voxel = Self::new_with_material(x, y, z, ShapeType::Sphere, material, is_static);
         voxel.sphere_radius = radius.max(0.2);
+        voxel
+    }
+
+    /// Box constructor for non-unit cube bodies such as humanoid limbs.
+    pub fn new_box_with_material(
+        x: f32,
+        y: f32,
+        z: f32,
+        half_extents: Vec3,
+        material: MaterialType,
+        is_static: bool,
+    ) -> Self {
+        let mut voxel = Self::new_with_material(x, y, z, ShapeType::Cube, material, is_static);
+        voxel.half_extents = half_extents.max(Vec3::splat(0.02));
         voxel
     }
 }

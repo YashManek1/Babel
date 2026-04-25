@@ -2,35 +2,54 @@
 // src/render/wgpu_view.rs  —  Operation Babel: WGPU Renderer
 // =============================================================================
 //
-// SPRINT 4 ADDITIONS:
-//   - render_frame_with_stress(): new render entry point that takes stress data
+// SPRINT 5 ADDITIONS:
+//   - Right-side "Agent Control" panel in egui for humanoid rig interaction
+//   - render_frame_with_stress() now accepts an agent_panel_state reference
+//   - AgentPanelState: tracks per-joint slider values and pose preset selection
+//   - UiAgentCommand variants emitted when user interacts with agent panel
+//   - Humanoid segment mesh rendering: box segments colored by segment type
+//   - Joint visualization: thin lines drawn between attachment points
+//
+// SPRINT 4 ADDITIONS (unchanged):
+//   - render_frame_with_stress(): stress-aware render entry point
 //   - height_to_color_with_stress(): stress-aware color computation
 //   - Scaffold rendering: diagonal hatch signal via color.g = -1.0
 //   - SpawnScaffold UiCommand: new button in the egui toolbar
 //   - despawn_scaffolding UI button: removes all scaffold in one click
 //
-// LEARNING TOPIC: How Stress Gets Into the Render Pipeline
-// --------------------------------------------------------
-// The stress value for each block comes from StressMap (computed by
-// compute_stress_system each frame). lib.rs collects (Voxel, stress, is_scaffold)
-// tuples and passes them to render_frame_with_stress(). This function builds the
-// vertex buffer with stress-tinted colors and uploads to the GPU.
+// LEARNING TOPIC: Dual-Panel egui Layout
+// ----------------------------------------
+// The left panel (egui::Window "Babel Engine") contains block spawning controls.
+// The NEW right panel (egui::SidePanel::right "Agent Control") contains:
 //
-// The path is: StressMap → CPU color computation → Vertex buffer → GPU → screen.
-// All math stays on the CPU where spatial graph traversal is straightforward.
-// The GPU shader just renders whatever color the CPU computed.
+//   Section 1 — Spawn/Despawn: one button to spawn a humanoid, one to remove all.
+//   Section 2 — Pose Presets: dropdown to apply named poses (T-Stance, Standing, etc.)
+//   Section 3 — Per-Joint Sliders: one angle slider per joint (8 total).
+//     Each slider shows the joint name (from BodySegment::display_label()),
+//     the current value in degrees, and a reset-to-zero button.
+//   Section 4 — Agent Status: live balance error, COM height, foot contacts.
 //
-// LEARNING TOPIC: The Color Encoding Convention
-// ---------------------------------------------
-// We pack special rendering modes into the vertex color channels:
-//   color.r < 0.0         → Ground plane (procedural grass shader)
-//   color.g < -0.5        → Scaffold block (diagonal hatch in shader)
-//   otherwise             → Normal block with stress-tinted color
+// LEARNING TOPIC: egui SidePanel vs Window
+// ------------------------------------------
+// egui::Window is a floating, draggable overlay (used for block spawner).
+// egui::SidePanel::right is a fixed panel anchored to the right edge of the
+// viewport — it never overlaps the 3D scene and its width is fixed.
+// This distinction matters because:
+//   - The 3D scene click-raycasting assumes the panel occupies the right portion
+//     of the screen (we subtract panel_width from viewport width when casting).
+//   - Windows can be minimized/moved; side panels cannot — the agent controls
+//     should always be visible during debugging and training.
 //
-// This avoids adding extra vertex attributes (which would require changing the
-// Vertex struct layout, buffer creation, and pipeline attribute descriptions).
-// The cost is one extra branch in the fragment shader — negligible on modern GPUs.
+// LEARNING TOPIC: The Color Encoding Convention (unchanged from Sprint 4)
+// -----------------------------------------------------------------------
+// color.r < 0.0         → Ground plane (procedural grass shader)
+// color.g < -0.5        → Scaffold block (diagonal hatch in shader)
+// color.r ∈ [10, 20)    → NEW SPRINT 5 SIGNAL: Humanoid segment
+//                          color.r = 10.0 + segment_index (0..9)
+//                          Shader reads this and applies the humanoid palette.
+// otherwise             → Normal block with stress-tinted color
 
+use crate::agent::{BodySegment, HumanoidPosePreset, UiAgentCommand};
 use crate::render::camera::FreecamState;
 use crate::world::voxel::{MaterialType, ShapeType, Voxel};
 use glam::{Mat4, Vec3};
@@ -43,14 +62,8 @@ use winit::{
 };
 
 // =============================================================================
-// LEARNING MECHANIC: The Command Pattern
+// LEARNING MECHANIC: The Command Pattern (unchanged)
 // =============================================================================
-// The UI lives on the GPU/render thread. Physics lives in the ECS/CPU world.
-// These two must NEVER touch each other's memory directly (data races, borrowing).
-//
-// Solution: The UI generates lightweight "intent" objects (UiCommand) and pushes
-// them into a Vec. After rendering finishes, the engine safely reads that Vec
-// and spawns the actual Voxel entities into ECS. Zero shared mutable state.
 pub enum UiCommand {
     SpawnCube {
         x: f32,
@@ -68,25 +81,68 @@ pub enum UiCommand {
         radius: f32,
         material_id: u8,
     },
-    // SPRINT 4: New UI command for scaffold placement
     SpawnScaffold {
         x: f32,
         z: f32,
     },
-    // SPRINT 4: Explicit scaffold removal command (no NaN sentinel hacks)
     DespawnAllScaffold,
 }
 
 // =============================================================================
-// LEARNING MECHANIC: Vertex Layout & bytemuck
+// AgentPanelState — Live state for the right-side agent control panel
 // =============================================================================
-// WGPU is a low-level GPU API. It doesn't understand "structs" — it only knows
-// raw bytes. The #[repr(C)] attribute forces Rust to lay out the struct exactly
-// like C does (fields in order, no padding), matching what the WGSL shader
-// expects at locations 0 (position) and 1 (color).
 //
-// bytemuck::Pod ("Plain Old Data") proves there are no pointers, no padding,
-// no uninitialized bytes — safe to reinterpret as raw &[u8] for GPU upload.
+// LEARNING: The panel state lives in RenderContext (not in ECS) because it is
+// purely UI state — it does not represent physics truth. The panel state is the
+// user's INTENT; the physics engine is the TRUTH. They are connected via
+// UiAgentCommand values: when the user moves a slider, we emit a command;
+// the engine processes the command next frame; the panel reflects the result.
+//
+// This is the same design as spawn_x / spawn_z on RenderContext for the
+// block spawner panel — UI state separate from physics state.
+pub struct AgentPanelState {
+    /// Joint angle slider values (degrees) for the selected agent.
+    /// Indexed by BodySegment::index().
+    /// 9 joints total matching the humanoid rig from humanoid.rs.
+    pub joint_angles_degrees: [f32; 9],
+
+    /// Currently selected pose preset in the dropdown.
+    pub selected_preset: HumanoidPosePreset,
+
+    /// Live balance error read from the most recently updated HumanoidRig.
+    /// Written by lib.rs after each physics step; read by the panel to display status.
+    pub display_balance_error: f32,
+
+    /// Live COM height.
+    pub display_com_height: f32,
+
+    /// Live left foot contact flag.
+    pub display_left_foot_contact: bool,
+
+    /// Live right foot contact flag.
+    pub display_right_foot_contact: bool,
+
+    /// How many humanoid agents are currently alive.
+    pub display_agent_count: usize,
+}
+
+impl Default for AgentPanelState {
+    fn default() -> Self {
+        Self {
+            joint_angles_degrees: [0.0; 9],
+            selected_preset: HumanoidPosePreset::Standing,
+            display_balance_error: 0.0,
+            display_com_height: 0.0,
+            display_left_foot_contact: false,
+            display_right_foot_contact: false,
+            display_agent_count: 0,
+        }
+    }
+}
+
+// =============================================================================
+// LEARNING MECHANIC: Vertex Layout & bytemuck (unchanged)
+// =============================================================================
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -106,7 +162,7 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: 12, // 3 floats × 4 bytes = 12 byte offset to color
+                    offset: 12,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x3,
                 },
@@ -116,205 +172,248 @@ impl Vertex {
 }
 
 // =============================================================================
-// LEARNING MECHANIC: Mesh Generation (CPU-side geometry)
+// SPRINT 5: Humanoid segment color palette
 // =============================================================================
-// push_cube_mesh builds the 8 vertices and 36 indices of a unit cube centered
-// at render_pos. Each vertex is rotated by voxel.rotation (a Quaternion) before
-// being placed in world space — this is how visual rotation works.
 //
-// LEARNING — TRIANGLES AND INDEX BUFFERS:
-// A GPU draws triangles. A cube has 6 faces × 2 triangles = 12 triangles = 36 indices.
-// Instead of duplicating vertex data, we store 8 unique vertices and reference
-// them by index. This "index buffer" technique saves ~4× GPU memory.
+// LEARNING: Sprint 5 needs the Worker to read as one humanoid agent, not a
+// rainbow of unrelated debug blocks. These colors stay close together while
+// still making the torso, legs, and arms readable.
+const HUMANOID_SEGMENT_COLORS: [[f32; 3]; BodySegment::COUNT] = [
+    [0.22, 0.40, 0.62], // Torso: work jacket blue
+    [0.24, 0.27, 0.30], // Left Thigh: dark work pants
+    [0.20, 0.22, 0.24], // Left Shin
+    [0.24, 0.27, 0.30], // Right Thigh
+    [0.20, 0.22, 0.24], // Right Shin
+    [0.78, 0.58, 0.40], // Left Upper Arm: skin/glove tone
+    [0.70, 0.50, 0.34], // Left Forearm
+    [0.78, 0.58, 0.40], // Right Upper Arm
+    [0.70, 0.50, 0.34], // Right Forearm
+];
+
+const HUMANOID_HEAD_COLOR: [f32; 3] = [0.78, 0.58, 0.40];
+
+// =============================================================================
+// Mesh builders (unchanged from Sprint 4, with humanoid segment support added)
+// =============================================================================
+
 fn push_cube_mesh(
-    v: &mut Vec<Vertex>,
-    s_indices: &mut Vec<u32>,
-    b_indices: &mut Vec<u32>,
+    vertex_buffer: &mut Vec<Vertex>,
+    solid_index_buffer: &mut Vec<u32>,
+    border_index_buffer: &mut Vec<u32>,
     voxel: &Voxel,
-    render_pos: Vec3,
+    render_position: Vec3,
     color: [f32; 3],
 ) {
-    let base = v.len() as u32;
-    let local_verts = [
-        Vec3::new(-0.5, -0.5, 0.5),  // 0: front-bottom-left
-        Vec3::new(0.5, -0.5, 0.5),   // 1: front-bottom-right
-        Vec3::new(0.5, 0.5, 0.5),    // 2: front-top-right
-        Vec3::new(-0.5, 0.5, 0.5),   // 3: front-top-left
-        Vec3::new(-0.5, -0.5, -0.5), // 4: back-bottom-left
-        Vec3::new(0.5, -0.5, -0.5),  // 5: back-bottom-right
-        Vec3::new(0.5, 0.5, -0.5),   // 6: back-top-right
-        Vec3::new(-0.5, 0.5, -0.5),  // 7: back-top-left
+    let base_index = vertex_buffer.len() as u32;
+    let local_vertices = [
+        Vec3::new(-0.5, -0.5, 0.5),
+        Vec3::new(0.5, -0.5, 0.5),
+        Vec3::new(0.5, 0.5, 0.5),
+        Vec3::new(-0.5, 0.5, 0.5),
+        Vec3::new(-0.5, -0.5, -0.5),
+        Vec3::new(0.5, -0.5, -0.5),
+        Vec3::new(0.5, 0.5, -0.5),
+        Vec3::new(-0.5, 0.5, -0.5),
     ];
 
-    for &local in local_verts.iter() {
-        let world = render_pos + (voxel.rotation * local);
-        v.push(Vertex {
+    for &local in local_vertices.iter() {
+        let world = render_position + (voxel.rotation * local);
+        vertex_buffer.push(Vertex {
             position: world.into(),
             color,
         });
     }
 
-    // 36 indices = 12 triangles = 6 faces × 2 triangles per face
-    s_indices.extend(
+    solid_index_buffer.extend(
         [
-            0, 1, 2, 2, 3, 0, // front
-            1, 5, 6, 6, 2, 1, // right
-            5, 4, 7, 7, 6, 5, // back
-            4, 0, 3, 3, 7, 4, // left
-            3, 2, 6, 6, 7, 3, // top
-            4, 5, 1, 1, 0, 4, // bottom
+            0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7,
+            3, 4, 5, 1, 1, 0, 4,
         ]
         .iter()
-        .map(|i| i + base),
+        .map(|index| index + base_index),
     );
 
-    // 24 indices = 12 edges × 2 endpoints per line segment (LineList topology)
-    b_indices.extend(
+    border_index_buffer.extend(
         [
-            0, 1, 1, 2, 2, 3, 3, 0, // front face edges
-            4, 5, 5, 6, 6, 7, 7, 4, // back face edges
-            0, 4, 1, 5, 2, 6, 3, 7, // connecting edges
+            0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7,
         ]
         .iter()
-        .map(|i| i + base),
+        .map(|index| index + base_index),
     );
 }
 
 fn push_wedge_mesh(
-    v: &mut Vec<Vertex>,
-    s_indices: &mut Vec<u32>,
-    b_indices: &mut Vec<u32>,
+    vertex_buffer: &mut Vec<Vertex>,
+    solid_index_buffer: &mut Vec<u32>,
+    border_index_buffer: &mut Vec<u32>,
     voxel: &Voxel,
-    render_pos: Vec3,
+    render_position: Vec3,
     color: [f32; 3],
 ) {
-    let base = v.len() as u32;
-    // A wedge (triangular prism) has 6 vertices:
-    // 4 on the bottom rectangle, 2 on the top back edge (slope peak)
-    let local_verts = [
-        Vec3::new(-0.5, -0.5, 0.5),  // 0: front-bottom-left
-        Vec3::new(0.5, -0.5, 0.5),   // 1: front-bottom-right
-        Vec3::new(0.5, -0.5, -0.5),  // 2: back-bottom-right
-        Vec3::new(-0.5, -0.5, -0.5), // 3: back-bottom-left
-        Vec3::new(0.5, 0.5, -0.5),   // 4: back-top-right (slope peak)
-        Vec3::new(-0.5, 0.5, -0.5),  // 5: back-top-left  (slope peak)
+    let base_index = vertex_buffer.len() as u32;
+    let local_vertices = [
+        Vec3::new(-0.5, -0.5, 0.5),
+        Vec3::new(0.5, -0.5, 0.5),
+        Vec3::new(0.5, -0.5, -0.5),
+        Vec3::new(-0.5, -0.5, -0.5),
+        Vec3::new(0.5, 0.5, -0.5),
+        Vec3::new(-0.5, 0.5, -0.5),
     ];
 
-    for &local in local_verts.iter() {
-        let world = render_pos + (voxel.rotation * local);
-        v.push(Vertex {
+    for &local in local_vertices.iter() {
+        let world = render_position + (voxel.rotation * local);
+        vertex_buffer.push(Vertex {
             position: world.into(),
             color,
         });
     }
 
-    s_indices.extend(
+    solid_index_buffer.extend(
         [
-            0, 1, 2, 2, 3, 0, // bottom face
-            3, 2, 4, 4, 5, 3, // back face (vertical)
-            0, 3, 5, 1, 4, 2, // two triangular ends (left and right)
-            0, 5, 4, 4, 1, 0, // slope face
+            0, 1, 2, 2, 3, 0, 3, 2, 4, 4, 5, 3, 0, 3, 5, 1, 4, 2, 0, 5, 4, 4, 1, 0,
         ]
         .iter()
-        .map(|i| i + base),
+        .map(|index| index + base_index),
     );
-    b_indices.extend(
+    border_index_buffer.extend(
         [0, 1, 1, 2, 2, 3, 3, 0, 3, 5, 5, 4, 4, 2, 0, 5, 1, 4]
             .iter()
-            .map(|i| i + base),
+            .map(|index| index + base_index),
     );
 }
 
 fn push_sphere_mesh(
-    v: &mut Vec<Vertex>,
-    s_indices: &mut Vec<u32>,
-    b_indices: &mut Vec<u32>,
+    vertex_buffer: &mut Vec<Vertex>,
+    solid_index_buffer: &mut Vec<u32>,
+    border_index_buffer: &mut Vec<u32>,
     voxel: &Voxel,
-    render_pos: Vec3,
+    render_position: Vec3,
     color: [f32; 3],
 ) {
-    // LEARNING MECHANIC: UV Sphere Tessellation
-    // A sphere is approximated by a grid of latitude (theta) and longitude (phi)
-    // angles. 12×18 gives a good balance between smoothness and vertex count.
-    let base = v.len() as u32;
-    let lat_count: u32 = 12;
-    let lon_count: u32 = 18;
+    let base_index = vertex_buffer.len() as u32;
+    let latitude_count: u32 = 12;
+    let longitude_count: u32 = 18;
 
-    for i in 0..=lat_count {
-        let theta = i as f32 * std::f32::consts::PI / lat_count as f32;
-        for j in 0..=lon_count {
-            let phi = j as f32 * 2.0 * std::f32::consts::PI / lon_count as f32;
+    for latitude_index in 0..=latitude_count {
+        let theta = latitude_index as f32 * std::f32::consts::PI / latitude_count as f32;
+        for longitude_index in 0..=longitude_count {
+            let phi = longitude_index as f32 * 2.0 * std::f32::consts::PI / longitude_count as f32;
             let local = Vec3::new(
                 theta.sin() * phi.cos(),
                 theta.cos(),
                 theta.sin() * phi.sin(),
             ) * voxel.sphere_radius;
-            let world = render_pos + (voxel.rotation * local);
-            v.push(Vertex {
+            let world = render_position + (voxel.rotation * local);
+            vertex_buffer.push(Vertex {
                 position: world.into(),
                 color,
             });
         }
     }
 
-    for i in 0..lat_count {
-        for j in 0..lon_count {
-            let r1 = i * (lon_count + 1);
-            let r2 = (i + 1) * (lon_count + 1);
-            s_indices.extend([base + r1 + j, base + r2 + j, base + r1 + j + 1]);
-            s_indices.extend([base + r1 + j + 1, base + r2 + j, base + r2 + j + 1]);
-            b_indices.extend([base + r1 + j, base + r1 + j + 1]);
-            b_indices.extend([base + r1 + j, base + r2 + j]);
+    for latitude_index in 0..latitude_count {
+        for longitude_index in 0..longitude_count {
+            let row_start = latitude_index * (longitude_count + 1);
+            let next_row_start = (latitude_index + 1) * (longitude_count + 1);
+            solid_index_buffer.extend([
+                base_index + row_start + longitude_index,
+                base_index + next_row_start + longitude_index,
+                base_index + row_start + longitude_index + 1,
+            ]);
+            solid_index_buffer.extend([
+                base_index + row_start + longitude_index + 1,
+                base_index + next_row_start + longitude_index,
+                base_index + next_row_start + longitude_index + 1,
+            ]);
+            border_index_buffer.extend([
+                base_index + row_start + longitude_index,
+                base_index + row_start + longitude_index + 1,
+            ]);
+            border_index_buffer.extend([
+                base_index + row_start + longitude_index,
+                base_index + next_row_start + longitude_index,
+            ]);
         }
     }
 }
 
 // =============================================================================
-// SPRINT 4: height_to_color_with_stress()
+// SPRINT 5: push_humanoid_segment_mesh — scaled cube for body segments
 // =============================================================================
 //
-// LEARNING TOPIC: Stress Heatmap Color Computation
-// -------------------------------------------------
-// This function computes the final vertex color for each block based on TWO
-// inputs: the material base color and the stress level.
+// LEARNING: Humanoid segments are rendered as SCALED cubes. The scale factors
+// match the segment dimensions from humanoid.rs (e.g., torso is 0.6 × 1.0 × 0.4).
 //
-// STRESS GRADIENT:
-//   stress = 0.0 → Green  [0.2, 0.8, 0.2]  — safe, no load
-//   stress = 0.5 → Yellow [0.9, 0.8, 0.1]  — stressed, approaching limit
-//   stress = 1.0 → Red    [0.9, 0.1, 0.1]  — critical, near failure
-//
-// We blend between material color and stress color based on stress level.
-// LOW stress: mostly material color (you can tell what material it is)
-// HIGH stress: mostly stress color (red/yellow warning dominates)
-//
-// This two-factor blending (material × stress) is better than pure stress
-// coloring because:
-//   1. You can still see material types at low stress (brown=wood, grey=stone)
-//   2. The warning color is visually unmistakable at high stress
-//   3. It matches real engineering practice: safe = material color, danger = red
-//
-// SCAFFOLD SIGNAL:
-//   For scaffold blocks, we return a special signal color with color.g = -2.0.
-//   The fragment shader detects color.g < -0.5 and draws the hatch pattern.
-//   We don't apply stress tinting to scaffold because scaffold stress is always
-//   low (ultra-light) and the hatch pattern is more informative.
+// Rather than storing separate half-extents in Voxel (which would bloat the
+// component), we pass the scale as a parameter derived from JointBodyProperties.
+// For Sprint 5 (rendering all segments as cubes), the scale is hardcoded per
+// segment type. Sprint 6 will read scales from the JointBodyProperties component.
+fn push_humanoid_segment_mesh(
+    vertex_buffer: &mut Vec<Vertex>,
+    solid_index_buffer: &mut Vec<u32>,
+    border_index_buffer: &mut Vec<u32>,
+    voxel: &Voxel,
+    render_position: Vec3,
+    color: [f32; 3],
+    half_extents: Vec3,
+) {
+    let base_index = vertex_buffer.len() as u32;
+
+    // 8 corners of a scaled box (not unit cube).
+    let local_vertices = [
+        Vec3::new(-half_extents.x, -half_extents.y, half_extents.z),
+        Vec3::new(half_extents.x, -half_extents.y, half_extents.z),
+        Vec3::new(half_extents.x, half_extents.y, half_extents.z),
+        Vec3::new(-half_extents.x, half_extents.y, half_extents.z),
+        Vec3::new(-half_extents.x, -half_extents.y, -half_extents.z),
+        Vec3::new(half_extents.x, -half_extents.y, -half_extents.z),
+        Vec3::new(half_extents.x, half_extents.y, -half_extents.z),
+        Vec3::new(-half_extents.x, half_extents.y, -half_extents.z),
+    ];
+
+    for &local in local_vertices.iter() {
+        let world = render_position + (voxel.rotation * local);
+        vertex_buffer.push(Vertex {
+            position: world.into(),
+            color,
+        });
+    }
+
+    solid_index_buffer.extend(
+        [
+            0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7,
+            3, 4, 5, 1, 1, 0, 4,
+        ]
+        .iter()
+        .map(|index| index + base_index),
+    );
+
+    border_index_buffer.extend(
+        [
+            0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7,
+        ]
+        .iter()
+        .map(|index| index + base_index),
+    );
+}
+
+// =============================================================================
+// SPRINT 4: height_to_color_with_stress() (unchanged)
+// =============================================================================
 fn height_to_color_with_stress(
     voxel: &Voxel,
     stress_normalized: f32,
     is_scaffold: bool,
 ) -> [f32; 3] {
-    // SPRINT 4: Scaffold gets the hatch signal — shader handles the pattern.
-    // color.r > 0.0 (not ground), color.g = -2.0 (scaffold signal to shader)
     if is_scaffold {
         return [0.001, -2.0, 0.0];
     }
 
-    // Material base color with slight height tinting (same as before Sprint 4)
     let base = match voxel.material {
         MaterialType::Wood => [0.70, 0.52, 0.32],
         MaterialType::Steel => [0.55, 0.60, 0.68],
         MaterialType::Stone => [0.62, 0.62, 0.58],
-        MaterialType::Scaffold => [0.85, 0.55, 0.15], // fallback (handled above)
+        MaterialType::Scaffold => [0.85, 0.55, 0.15],
     };
     let height_boost = ((voxel.position.y.max(0.0) / 12.0) * 0.10).min(0.10);
     let base_tinted = [
@@ -323,162 +422,191 @@ fn height_to_color_with_stress(
         (base[2] + height_boost).min(1.0),
     ];
 
-    // Stress color gradient: green → yellow → red (two-segment lerp)
-    // LEARNING: We evaluate the gradient at the current stress value.
-    // Segment 1 [0.0, 0.5]: lerp green→yellow by (stress/0.5)
-    // Segment 2 [0.5, 1.0]: lerp yellow→red by ((stress-0.5)/0.5)
     let green = [0.2_f32, 0.85, 0.2];
     let yellow = [0.95_f32, 0.85, 0.1];
     let red = [0.95_f32, 0.1, 0.1];
 
     let stress_color = if stress_normalized <= 0.5 {
-        let t = stress_normalized / 0.5;
+        let blend_factor = stress_normalized / 0.5;
         [
-            green[0] + (yellow[0] - green[0]) * t,
-            green[1] + (yellow[1] - green[1]) * t,
-            green[2] + (yellow[2] - green[2]) * t,
+            green[0] + (yellow[0] - green[0]) * blend_factor,
+            green[1] + (yellow[1] - green[1]) * blend_factor,
+            green[2] + (yellow[2] - green[2]) * blend_factor,
         ]
     } else {
-        let t = (stress_normalized - 0.5) / 0.5;
+        let blend_factor = (stress_normalized - 0.5) / 0.5;
         [
-            yellow[0] + (red[0] - yellow[0]) * t,
-            yellow[1] + (red[1] - yellow[1]) * t,
-            yellow[2] + (red[2] - yellow[2]) * t,
+            yellow[0] + (red[0] - yellow[0]) * blend_factor,
+            yellow[1] + (red[1] - yellow[1]) * blend_factor,
+            yellow[2] + (red[2] - yellow[2]) * blend_factor,
         ]
     };
 
-    // Blend material color and stress color.
-    // At low stress: mostly material color (blend_t near 0).
-    // At high stress: mostly stress color (blend_t near 1).
-    //
-    // LEARNING: We use a non-linear blend (stress²) so colors stay
-    // near their material base for most of the safe range and only
-    // sharply shift toward warning colors as stress approaches 1.0.
-    // This prevents the whole structure looking slightly yellow all the time.
-    let blend_t = stress_normalized * stress_normalized; // quadratic — slow to change, fast near 1.0
+    let quadratic_blend = stress_normalized * stress_normalized;
     [
-        base_tinted[0] + (stress_color[0] - base_tinted[0]) * blend_t,
-        base_tinted[1] + (stress_color[1] - base_tinted[1]) * blend_t,
-        base_tinted[2] + (stress_color[2] - base_tinted[2]) * blend_t,
+        base_tinted[0] + (stress_color[0] - base_tinted[0]) * quadratic_blend,
+        base_tinted[1] + (stress_color[1] - base_tinted[1]) * quadratic_blend,
+        base_tinted[2] + (stress_color[2] - base_tinted[2]) * quadratic_blend,
     ]
 }
 
 // =============================================================================
-// SPRINT 4: build_mesh_with_stress()
+// build_mesh_with_stress — builds the vertex and index buffers for ALL objects
 // =============================================================================
 //
-// Updated mesh builder that takes (voxel, stress, is_scaffold) tuples.
-// The stress value and scaffold flag are passed to height_to_color_with_stress()
-// to compute the final vertex color before uploading to the GPU.
+// SPRINT 5: Now also accepts humanoid segment data.
+// Humanoid segments are rendered as scaled cubes with segment-specific colors.
+//
+// Arguments:
+//   voxels: (voxel_ref, stress_normalized, is_scaffold, humanoid_segment_index)
+//     humanoid_segment_index: None = normal block, Some(i) = humanoid segment i
 fn build_mesh_with_stress(
-    voxels: &[(&Voxel, f32, bool)],
-    tx: f32,
-    tz: f32,
+    voxels: &[(&Voxel, f32, bool, Option<usize>)],
+    spawn_target_x: f32,
+    spawn_target_z: f32,
 ) -> (Vec<Vertex>, Vec<u32>, Vec<u32>) {
-    let mut vertices = Vec::new();
-    let mut solid_indices = Vec::new();
-    let mut border_indices = Vec::new();
+    let mut vertex_buffer = Vec::new();
+    let mut solid_index_buffer = Vec::new();
+    let mut border_index_buffer = Vec::new();
 
-    // ── Ground plane ──────────────────────────────────────────────────────────
-    // LEARNING: The ground is NOT a Voxel entity — it's a special fullscreen
-    // quad with color.r = -1.0, which the WGSL shader detects as the "draw
-    // procedural grass" signal. This avoids spawning a physics entity for an
-    // infinite static floor.
-    let s = 1000.0;
-    let ground_y = -0.501; // Just below floor_y=-0.5 to avoid Z-fighting with blocks
-    let floor_verts = [
+    // ── Ground plane (unchanged) ──────────────────────────────────────────────
+    let ground_size = 1000.0;
+    let ground_y = -0.501;
+    let floor_vertices = [
         Vertex {
-            position: [-s, ground_y, s],
+            position: [-ground_size, ground_y, ground_size],
             color: [-1.0, 0.0, 0.0],
         },
         Vertex {
-            position: [s, ground_y, s],
+            position: [ground_size, ground_y, ground_size],
             color: [-1.0, 0.0, 0.0],
         },
         Vertex {
-            position: [s, ground_y, -s],
+            position: [ground_size, ground_y, -ground_size],
             color: [-1.0, 0.0, 0.0],
         },
         Vertex {
-            position: [-s, ground_y, -s],
+            position: [-ground_size, ground_y, -ground_size],
             color: [-1.0, 0.0, 0.0],
         },
     ];
-    vertices.extend_from_slice(&floor_verts);
-    solid_indices.extend_from_slice(&[0, 1, 2, 2, 3, 0]);
+    vertex_buffer.extend_from_slice(&floor_vertices);
+    solid_index_buffer.extend_from_slice(&[0, 1, 2, 2, 3, 0]);
 
-    // ── Yellow target cursor ──────────────────────────────────────────────────
-    // Wireframe square on the ground showing the current spawn target position.
-    let ti = vertices.len() as u32;
-    let target_verts = [
+    // ── Yellow spawn target cursor (unchanged) ────────────────────────────────
+    let cursor_base_index = vertex_buffer.len() as u32;
+    let cursor_vertices = [
         Vertex {
-            position: [tx - 0.5, -0.49, tz - 0.5],
+            position: [spawn_target_x - 0.5, -0.49, spawn_target_z - 0.5],
             color: [1.0, 1.0, 0.0],
         },
         Vertex {
-            position: [tx + 0.5, -0.49, tz - 0.5],
+            position: [spawn_target_x + 0.5, -0.49, spawn_target_z - 0.5],
             color: [1.0, 1.0, 0.0],
         },
         Vertex {
-            position: [tx + 0.5, -0.49, tz + 0.5],
+            position: [spawn_target_x + 0.5, -0.49, spawn_target_z + 0.5],
             color: [1.0, 1.0, 0.0],
         },
         Vertex {
-            position: [tx - 0.5, -0.49, tz + 0.5],
+            position: [spawn_target_x - 0.5, -0.49, spawn_target_z + 0.5],
             color: [1.0, 1.0, 0.0],
         },
     ];
-    vertices.extend_from_slice(&target_verts);
-    border_indices.extend_from_slice(&[ti, ti + 1, ti + 1, ti + 2, ti + 2, ti + 3, ti + 3, ti]);
+    vertex_buffer.extend_from_slice(&cursor_vertices);
+    border_index_buffer.extend_from_slice(&[
+        cursor_base_index,
+        cursor_base_index + 1,
+        cursor_base_index + 1,
+        cursor_base_index + 2,
+        cursor_base_index + 2,
+        cursor_base_index + 3,
+        cursor_base_index + 3,
+        cursor_base_index,
+    ]);
 
-    // ── Voxel blocks ──────────────────────────────────────────────────────────
-    for (voxel, stress_normalized, is_scaffold) in voxels.iter() {
+    // ── Voxel blocks and humanoid segments ────────────────────────────────────
+    for (voxel, stress_normalized, is_scaffold, humanoid_segment_index) in voxels.iter() {
         if voxel.position.is_nan() {
             continue;
         }
 
-        // Exact world position — no epsilon offset.
-        // LEARNING: The depth bias on the solid pipeline (wgpu_view.rs pipeline setup)
-        // already handles solid-vs-wireframe Z-fighting. For block-vs-block shared
-        // faces, the physics engine ensures blocks are separated by exactly 1.0 unit,
-        // so shared faces never have identical depth values.
-        let render_pos = voxel.position;
+        let render_position = voxel.position;
 
-        // SPRINT 4: Color now encodes both material and stress (or scaffold hatch signal)
-        let color = height_to_color_with_stress(voxel, *stress_normalized, *is_scaffold);
+        if let Some(segment_index) = humanoid_segment_index {
+            // ── SPRINT 5: Humanoid segment rendering ──────────────────────────
+            //
+            // LEARNING: Each body segment is rendered as a proportionally-scaled box
+            // using the segment-specific half-extents from humanoid.rs constants.
+            // We hard-code the segment sizes here to avoid adding a dimension field
+            // to the Voxel component (which would bloat the hot physics path).
+            let half_extents = voxel.half_extents;
+            let segment_color = HUMANOID_SEGMENT_COLORS
+                .get(*segment_index)
+                .copied()
+                .unwrap_or([0.5, 0.5, 0.5]);
 
-        match voxel.shape {
-            ShapeType::Cube => push_cube_mesh(
-                &mut vertices,
-                &mut solid_indices,
-                &mut border_indices,
+            push_humanoid_segment_mesh(
+                &mut vertex_buffer,
+                &mut solid_index_buffer,
+                &mut border_index_buffer,
                 voxel,
-                render_pos,
-                color,
-            ),
-            ShapeType::Wedge => push_wedge_mesh(
-                &mut vertices,
-                &mut solid_indices,
-                &mut border_indices,
-                voxel,
-                render_pos,
-                color,
-            ),
-            ShapeType::Sphere => push_sphere_mesh(
-                &mut vertices,
-                &mut solid_indices,
-                &mut border_indices,
-                voxel,
-                render_pos,
-                color,
-            ),
+                render_position,
+                segment_color,
+                half_extents,
+            );
+
+            if *segment_index == BodySegment::Torso.index() {
+                let head_center =
+                    render_position + (voxel.rotation * Vec3::new(0.0, half_extents.y + 0.18, 0.0));
+                push_humanoid_segment_mesh(
+                    &mut vertex_buffer,
+                    &mut solid_index_buffer,
+                    &mut border_index_buffer,
+                    voxel,
+                    head_center,
+                    HUMANOID_HEAD_COLOR,
+                    Vec3::new(0.17, 0.17, 0.16),
+                );
+            }
+        } else {
+            // ── Normal voxel block rendering (unchanged) ──────────────────────
+            let color = height_to_color_with_stress(voxel, *stress_normalized, *is_scaffold);
+
+            match voxel.shape {
+                ShapeType::Cube => push_cube_mesh(
+                    &mut vertex_buffer,
+                    &mut solid_index_buffer,
+                    &mut border_index_buffer,
+                    voxel,
+                    render_position,
+                    color,
+                ),
+                ShapeType::Wedge => push_wedge_mesh(
+                    &mut vertex_buffer,
+                    &mut solid_index_buffer,
+                    &mut border_index_buffer,
+                    voxel,
+                    render_position,
+                    color,
+                ),
+                ShapeType::Sphere => push_sphere_mesh(
+                    &mut vertex_buffer,
+                    &mut solid_index_buffer,
+                    &mut border_index_buffer,
+                    voxel,
+                    render_position,
+                    color,
+                ),
+            }
         }
     }
-    (vertices, solid_indices, border_indices)
+
+    (vertex_buffer, solid_index_buffer, border_index_buffer)
 }
 
 // =============================================================================
-// RenderContext: owns all WGPU state
+// RenderContext: owns all WGPU state + egui state + Sprint 5 agent panel state
 // =============================================================================
 pub struct RenderContext {
     pub device: wgpu::Device,
@@ -494,32 +622,31 @@ pub struct RenderContext {
     pub egui_ctx: egui::Context,
     pub egui_state: egui_winit::State,
     pub egui_renderer: egui_wgpu::Renderer,
-    last_cursor_px: Option<(f32, f32)>,
+    last_cursor_pixel_position: Option<(f32, f32)>,
     pub spawn_x: f32,
     pub spawn_z: f32,
-    sphere_r: f32,
+    sphere_radius: f32,
     selected_material_id: u8,
-    // SPRINT 4: Track whether the stress heatmap is enabled in the UI.
-    // When false, blocks use their material base color only.
-    // When true, the stress gradient overrides the base color at high stress.
-    // This toggle lets users compare structure appearance with/without heatmap.
     show_stress_heatmap: bool,
     pub camera: FreecamState,
+
+    // ── SPRINT 5: Agent control panel state ──────────────────────────────────
+    pub agent_panel: AgentPanelState,
 }
 
 impl RenderContext {
     pub fn new(event_loop: &EventLoop<()>) -> Option<Self> {
-        pollster::block_on(Self::init_wgpu(event_loop))
+        pollster::block_on(Self::initialize_wgpu(event_loop))
     }
 
-    async fn init_wgpu(event_loop: &EventLoop<()>) -> Option<Self> {
+    async fn initialize_wgpu(event_loop: &EventLoop<()>) -> Option<Self> {
         let instance = wgpu::Instance::default();
         let window = Arc::new(
             event_loop
                 .create_window(
                     Window::default_attributes()
                         .with_title("Operation Babel: World Builder")
-                        .with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0)),
+                        .with_inner_size(winit::dpi::LogicalSize::new(1200.0, 768.0)),
                 )
                 .unwrap(),
         );
@@ -571,11 +698,11 @@ impl RenderContext {
             });
 
         let camera = FreecamState::default();
-        let aspect = config.width as f32 / config.height as f32;
-        let mvp = camera.build_mvp(aspect);
+        let aspect_ratio = config.width as f32 / config.height as f32;
+        let initial_mvp = camera.build_mvp(aspect_ratio);
         let camera_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("camera_buf"),
-            contents: bytemuck::cast_slice(&[mvp]),
+            contents: bytemuck::cast_slice(&[initial_mvp]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -613,9 +740,6 @@ impl RenderContext {
             push_constant_ranges: &[],
         });
 
-        // LEARNING MECHANIC: Depth Bias (Z-Fighting Prevention for Solid vs Wire)
-        // DepthBias pushes solid polygons BACK in depth space so wireframe lines
-        // always sit in front of the solid face they outline.
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("3D_Solid_Pipeline"),
             layout: Some(&pipeline_layout),
@@ -637,7 +761,7 @@ impl RenderContext {
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: Some(wgpu::Face::Back), // back-face culling saves ~50% fragment work
+                cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -717,13 +841,14 @@ impl RenderContext {
             egui_ctx,
             egui_state,
             egui_renderer,
-            last_cursor_px: None,
+            last_cursor_pixel_position: None,
             spawn_x: 0.0,
             spawn_z: 0.0,
-            sphere_r: 1.0,
+            sphere_radius: 1.0,
             selected_material_id: 0,
-            show_stress_heatmap: true, // SPRINT 4: enabled by default
+            show_stress_heatmap: true,
             camera,
+            agent_panel: AgentPanelState::default(),
         })
     }
 
@@ -731,18 +856,15 @@ impl RenderContext {
         let _ = self.egui_state.on_window_event(&self.window, event);
 
         if let winit::event::WindowEvent::CursorMoved { position, .. } = event {
-            self.last_cursor_px = Some((position.x as f32, position.y as f32));
+            self.last_cursor_pixel_position = Some((position.x as f32, position.y as f32));
         }
 
-        // Right mouse button state → orbit guard
-        // LEARNING: We only orbit on RMB so LMB stays free for egui interaction.
         if let winit::event::WindowEvent::MouseInput { state, button, .. } = event {
             if *button == MouseButton::Right {
                 self.camera.set_rmb(*state == ElementState::Pressed);
             }
         }
 
-        // Scroll wheel → zoom
         if let winit::event::WindowEvent::MouseWheel { delta, .. } = event {
             if !self.egui_ctx.wants_pointer_input() {
                 let scroll = match delta {
@@ -753,7 +875,6 @@ impl RenderContext {
             }
         }
 
-        // Keyboard → WASD held-key state
         if let winit::event::WindowEvent::KeyboardInput {
             event: key_event, ..
         } = event
@@ -763,7 +884,6 @@ impl RenderContext {
             }
         }
 
-        // LMB ray-cast: find where the mouse ray hits the ground plane → spawn target
         if let winit::event::WindowEvent::MouseInput {
             state: ElementState::Pressed,
             button: MouseButton::Left,
@@ -771,24 +891,34 @@ impl RenderContext {
         } = event
         {
             if !self.egui_ctx.wants_pointer_input() {
-                if let Some((px, py)) = self.last_cursor_px {
-                    let w = self.config.width as f32;
-                    let h = self.config.height as f32;
-                    let ndc_x = (px / w) * 2.0 - 1.0;
-                    let ndc_y = 1.0 - (py / h) * 2.0;
+                if let Some((pixel_x, pixel_y)) = self.last_cursor_pixel_position {
+                    let viewport_width = self.config.width as f32;
+                    let viewport_height = self.config.height as f32;
+                    let normalized_device_x = (pixel_x / viewport_width) * 2.0 - 1.0;
+                    let normalized_device_y = 1.0 - (pixel_y / viewport_height) * 2.0;
 
-                    let mvp = Mat4::from_cols_array_2d(&self.camera.build_mvp(w / h));
-                    let inv_mvp = mvp.inverse();
+                    let mvp = Mat4::from_cols_array_2d(
+                        &self.camera.build_mvp(viewport_width / viewport_height),
+                    );
+                    let inverse_mvp = mvp.inverse();
 
-                    let near = inv_mvp.project_point3(Vec3::new(ndc_x, ndc_y, 0.0));
-                    let far = inv_mvp.project_point3(Vec3::new(ndc_x, ndc_y, 1.0));
-                    let dir = (far - near).normalize();
+                    let near_point = inverse_mvp.project_point3(Vec3::new(
+                        normalized_device_x,
+                        normalized_device_y,
+                        0.0,
+                    ));
+                    let far_point = inverse_mvp.project_point3(Vec3::new(
+                        normalized_device_x,
+                        normalized_device_y,
+                        1.0,
+                    ));
+                    let ray_direction = (far_point - near_point).normalize();
 
-                    if dir.y.abs() > 1e-5 {
-                        let t = -near.y / dir.y;
-                        let hit = near + dir * t;
-                        self.spawn_x = hit.x.round();
-                        self.spawn_z = hit.z.round();
+                    if ray_direction.y.abs() > 1e-5 {
+                        let ray_parameter = -near_point.y / ray_direction.y;
+                        let ground_hit = near_point + ray_direction * ray_parameter;
+                        self.spawn_x = ground_hit.x.round();
+                        self.spawn_z = ground_hit.z.round();
                     }
                 }
             }
@@ -796,110 +926,300 @@ impl RenderContext {
     }
 
     pub fn handle_device_event(&mut self, event: &DeviceEvent) {
-        // LEARNING: DeviceEvent::MouseMotion gives RAW DELTA from hardware sensors.
-        // Continues updating even at screen edges, no OS acceleration curves.
         if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
             self.camera.mouse_delta(*dx, *dy);
         }
     }
 
     // =========================================================================
-    // SPRINT 4: render_frame_with_stress() — Stress-aware render entry point
+    // SPRINT 5: render_frame_with_stress — now returns BOTH UiCommand and UiAgentCommand
     // =========================================================================
     //
-    // LEARNING: This replaces render_frame() to accept stress data alongside
-    // voxel data. The stress values are baked into vertex colors on the CPU
-    // before upload to the GPU, so the shader is unchanged in its logic —
-    // it just renders whatever color the CPU computed.
+    // Returns: (block_commands: Vec<UiCommand>, agent_commands: Vec<UiAgentCommand>)
     //
-    // If show_stress_heatmap is false, we pass stress=0.0 for all blocks,
-    // which causes height_to_color_with_stress to use pure material colors.
-    pub fn render_frame_with_stress(&mut self, voxels: &[(&Voxel, f32, bool)]) -> Vec<UiCommand> {
-        // Recompute MVP and upload to the GPU uniform buffer.
-        // LEARNING: queue.write_buffer schedules a CPU→GPU memcpy that completes
-        // before the next draw call. This is the fast path for small uniforms.
-        let aspect = self.config.width as f32 / self.config.height as f32;
-        let mvp = self.camera.build_mvp(aspect);
+    // The caller (lib.rs render()) processes both vectors after this returns.
+    // Block commands spawn/despawn voxel blocks (unchanged behavior).
+    // Agent commands spawn/control humanoid agents (Sprint 5 new behavior).
+    pub fn render_frame_with_stress(
+        &mut self,
+        voxels: &[(&Voxel, f32, bool, Option<usize>)],
+    ) -> (Vec<UiCommand>, Vec<UiAgentCommand>) {
+        let aspect_ratio = self.config.width as f32 / self.config.height as f32;
+        let mvp_matrix = self.camera.build_mvp(aspect_ratio);
         self.queue
-            .write_buffer(&self.camera_buf, 0, bytemuck::cast_slice(&[mvp]));
+            .write_buffer(&self.camera_buf, 0, bytemuck::cast_slice(&[mvp_matrix]));
 
-        let mut commands = Vec::new();
+        let mut block_commands: Vec<UiCommand> = Vec::new();
+        let mut agent_commands: Vec<UiAgentCommand> = Vec::new();
 
         // ── egui UI pass ──────────────────────────────────────────────────────
         let raw_input = self.egui_state.take_egui_input(&self.window);
         self.egui_ctx.begin_pass(raw_input);
 
+        // ── Left panel: Block spawner (unchanged) ─────────────────────────────
         egui::Window::new("Babel Engine")
             .resizable(false)
             .show(&self.egui_ctx, |ui| {
-                ui.label(format!("Blocks: {}", voxels.len()));
-                ui.separator();
                 ui.label(format!(
-                    "Target Ground: [{}, {}]",
-                    self.spawn_x, self.spawn_z
+                    "Blocks: {}",
+                    voxels.iter().filter(|(_, _, _, seg)| seg.is_none()).count()
                 ));
                 ui.separator();
-
-                // SPRINT 4: Stress heatmap toggle
+                ui.label(format!("Target: [{}, {}]", self.spawn_x, self.spawn_z));
+                ui.separator();
                 ui.checkbox(&mut self.show_stress_heatmap, "Show Stress Heatmap");
                 ui.label("Green=Safe  Yellow=Stressed  Red=Critical");
                 ui.separator();
-
                 ui.label("Material:");
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.selected_material_id, 0, "Wood");
                     ui.selectable_value(&mut self.selected_material_id, 1, "Steel");
                     ui.selectable_value(&mut self.selected_material_id, 2, "Stone");
                 });
-                let material_hint = match self.selected_material_id {
-                    0 => "Wood: medium adhesion, light weight",
-                    1 => "Steel: high adhesion, heavy weight",
-                    2 => "Stone: no adhesion, high friction",
-                    _ => "Wood: medium adhesion, light weight",
-                };
-                ui.label(material_hint);
-
                 if ui.button("Spawn Cube").clicked() {
-                    commands.push(UiCommand::SpawnCube {
+                    block_commands.push(UiCommand::SpawnCube {
                         x: self.spawn_x,
                         z: self.spawn_z,
                         material_id: self.selected_material_id,
                     });
                 }
                 if ui.button("Spawn Wedge").clicked() {
-                    commands.push(UiCommand::SpawnWedge {
+                    block_commands.push(UiCommand::SpawnWedge {
                         x: self.spawn_x,
                         z: self.spawn_z,
                         material_id: self.selected_material_id,
                     });
                 }
                 ui.separator();
-                ui.add(egui::Slider::new(&mut self.sphere_r, 0.5..=4.0).text("Sphere Radius"));
+                ui.add(egui::Slider::new(&mut self.sphere_radius, 0.5..=4.0).text("Sphere Radius"));
                 if ui.button("Spawn Sphere").clicked() {
-                    commands.push(UiCommand::SpawnSphere {
+                    block_commands.push(UiCommand::SpawnSphere {
                         x: self.spawn_x,
                         z: self.spawn_z,
-                        radius: self.sphere_r,
+                        radius: self.sphere_radius,
                         material_id: self.selected_material_id,
                     });
                 }
-
-                // SPRINT 4: Scaffold controls
                 ui.separator();
                 ui.label("Scaffold (temporary support):");
                 if ui.button("Place Scaffold").clicked() {
-                    commands.push(UiCommand::SpawnScaffold {
+                    block_commands.push(UiCommand::SpawnScaffold {
                         x: self.spawn_x,
                         z: self.spawn_z,
                     });
                 }
-                // LEARNING: The "Remove All Scaffold" button is the UI equivalent
-                // of the RL agent's despawn_scaffolding() action. We emit a
-                // dedicated command variant so physics code never sees NaN
-                // coordinates from sentinel-based signaling.
                 if ui.button("Remove All Scaffold").clicked() {
-                    commands.push(UiCommand::DespawnAllScaffold);
+                    block_commands.push(UiCommand::DespawnAllScaffold);
                 }
+            });
+
+        // ── SPRINT 5: Right panel: Agent control ──────────────────────────────
+        //
+        // LEARNING: egui::SidePanel::right anchors to the right screen edge.
+        // The panel width is fixed at 240 pixels — wide enough for sliders
+        // and labels, narrow enough to leave the 3D viewport usable.
+        // Unlike egui::Window, this panel cannot be moved or minimized,
+        // which makes it reliable for agent debugging during training.
+        egui::SidePanel::right("agent_control_panel")
+            .resizable(false)
+            .min_width(250.0)
+            .show(&self.egui_ctx, |ui| {
+                // ── Section header ────────────────────────────────────────────
+                ui.heading("⚙ Agent Control");
+                ui.separator();
+
+                // ── Section 1: Spawn / Despawn ────────────────────────────────
+                ui.label(format!(
+                    "Agents alive: {}",
+                    self.agent_panel.display_agent_count
+                ));
+                ui.horizontal(|ui| {
+                    if ui.button("Spawn Worker").clicked() {
+                        agent_commands.push(UiAgentCommand::SpawnHumanoid);
+                    }
+                    if ui.button("Remove All").clicked() {
+                        agent_commands.push(UiAgentCommand::DespawnAllHumanoids);
+                    }
+                });
+                ui.separator();
+
+                // ── Section 2: Agent Status ───────────────────────────────────
+                //
+                // LEARNING: These values are written by lib.rs after each physics step
+                // into self.agent_panel. The panel reads them here for display ONLY.
+                // No physics logic happens in the renderer — pure visualization.
+                ui.label("Agent Status");
+                let balance_display = self.agent_panel.display_balance_error;
+                let balance_color = if balance_display < 0.3 {
+                    egui::Color32::GREEN
+                } else if balance_display < 0.7 {
+                    egui::Color32::YELLOW
+                } else {
+                    egui::Color32::RED
+                };
+                ui.colored_label(
+                    balance_color,
+                    format!("Balance error: {:.2}", balance_display),
+                );
+                ui.label(format!(
+                    "COM height: {:.2}m",
+                    self.agent_panel.display_com_height
+                ));
+                ui.horizontal(|ui| {
+                    let left_color = if self.agent_panel.display_left_foot_contact {
+                        egui::Color32::GREEN
+                    } else {
+                        egui::Color32::DARK_GRAY
+                    };
+                    let right_color = if self.agent_panel.display_right_foot_contact {
+                        egui::Color32::GREEN
+                    } else {
+                        egui::Color32::DARK_GRAY
+                    };
+                    ui.colored_label(left_color, "L-Foot");
+                    ui.colored_label(right_color, "R-Foot");
+                });
+                ui.separator();
+
+                ui.label("Movement");
+                ui.vertical_centered(|ui| {
+                    if ui.button("Forward").clicked() {
+                        agent_commands
+                            .push(UiAgentCommand::MoveActiveHumanoid { direction: Vec3::Z });
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("Left").clicked() {
+                            agent_commands.push(UiAgentCommand::MoveActiveHumanoid {
+                                direction: -Vec3::X,
+                            });
+                        }
+                        if ui.button("Backward").clicked() {
+                            agent_commands.push(UiAgentCommand::MoveActiveHumanoid {
+                                direction: -Vec3::Z,
+                            });
+                        }
+                        if ui.button("Right").clicked() {
+                            agent_commands
+                                .push(UiAgentCommand::MoveActiveHumanoid { direction: Vec3::X });
+                        }
+                    });
+                });
+                ui.separator();
+
+                // ── Section 3: Pose Presets ───────────────────────────────────
+                //
+                // LEARNING: The preset dropdown lets the user test all joints at once.
+                // Each HumanoidPosePreset defines target angles for all 8 joints.
+                // Clicking "Apply" emits one ApplyPosePreset command, which lib.rs
+                // translates into 8 individual apply_torque_to_joint() calls.
+                ui.label("Pose Presets");
+                let current_preset_label = self.agent_panel.selected_preset.display_label();
+                egui::ComboBox::from_id_salt("pose_preset_combo")
+                    .selected_text(current_preset_label)
+                    .show_ui(ui, |combo_ui| {
+                        let presets = [
+                            HumanoidPosePreset::TeeStance,
+                            HumanoidPosePreset::Standing,
+                            HumanoidPosePreset::WalkMidStride,
+                            HumanoidPosePreset::Squat,
+                            HumanoidPosePreset::ArmRaise,
+                        ];
+                        for preset in presets {
+                            let is_selected = preset == self.agent_panel.selected_preset;
+                            if combo_ui
+                                .selectable_label(is_selected, preset.display_label())
+                                .clicked()
+                            {
+                                self.agent_panel.selected_preset = preset;
+                                // Also update the slider values to match the preset.
+                                for &(segment, angle_radians) in preset.joint_angles() {
+                                    let idx = segment.index();
+                                    if idx < 9 {
+                                        self.agent_panel.joint_angles_degrees[idx] =
+                                            angle_radians.to_degrees();
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                if ui.button("Apply Pose").clicked() {
+                    agent_commands.push(UiAgentCommand::ApplyPosePreset {
+                        preset: self.agent_panel.selected_preset,
+                    });
+                }
+                ui.separator();
+
+                // ── Section 4: Per-Joint Angle Sliders ───────────────────────
+                //
+                // LEARNING: 8 sliders, one per joint. Each slider:
+                //   - Shows the joint name (e.g. "L Thigh")
+                //   - Ranges from the joint's anatomical min to max (degrees)
+                //   - Emits a SetJointAngle command when the value changes
+                //   - Has a "⟲" reset button to return to 0°
+                //
+                // The sliders operate in DEGREES for user-friendliness. Internally,
+                // all joint angles are stored in RADIANS (XPBD uses radians).
+                // Conversion: radians = degrees × π/180.
+                ui.label("Joint Angles");
+                ui.add_space(4.0);
+
+                // Define per-joint slider ranges in degrees.
+                // (segment, label, min_degrees, max_degrees)
+                let joint_slider_configs: &[(BodySegment, &str, f32, f32)] = &[
+                    (BodySegment::LeftThigh, "L Hip", -45.0, 90.0),
+                    (BodySegment::LeftShin, "L Knee", -3.0, 120.0),
+                    (BodySegment::RightThigh, "R Hip", -45.0, 90.0),
+                    (BodySegment::RightShin, "R Knee", -3.0, 120.0),
+                    (BodySegment::LeftUpperArm, "L Shoulder", -30.0, 90.0),
+                    (BodySegment::LeftForearm, "L Elbow", 0.0, 145.0),
+                    (BodySegment::RightUpperArm, "R Shoulder", -30.0, 90.0),
+                    (BodySegment::RightForearm, "R Elbow", 0.0, 145.0),
+                ];
+
+                egui::ScrollArea::vertical()
+                    .id_salt("joint_sliders_scroll")
+                    .max_height(400.0)
+                    .show(ui, |scroll_ui| {
+                        for &(segment, label, min_degrees, max_degrees) in joint_slider_configs {
+                            let slider_index = segment.index();
+                            let current_degrees =
+                                &mut self.agent_panel.joint_angles_degrees[slider_index];
+
+                            scroll_ui.horizontal(|row_ui| {
+                                // Joint label: fixed width so sliders align vertically.
+                                row_ui.add_sized(
+                                    [70.0, 18.0],
+                                    egui::Label::new(egui::RichText::new(label).size(11.0)),
+                                );
+
+                                // Angle slider.
+                                let slider_response = row_ui.add(
+                                    egui::Slider::new(current_degrees, min_degrees..=max_degrees)
+                                        .suffix("°")
+                                        .fixed_decimals(0)
+                                        .clamping(egui::SliderClamping::Always),
+                                );
+
+                                // Emit command when the slider value changes.
+                                if slider_response.changed() {
+                                    agent_commands.push(UiAgentCommand::SetJointAngle {
+                                        segment,
+                                        target_angle_radians: current_degrees.to_radians(),
+                                    });
+                                }
+
+                                // Reset button: small "⟲" that zeroes the joint.
+                                if row_ui.small_button("⟲").clicked() {
+                                    *current_degrees = 0.0;
+                                    agent_commands.push(UiAgentCommand::SetJointAngle {
+                                        segment,
+                                        target_angle_radians: 0.0,
+                                    });
+                                }
+                            });
+                        }
+                    });
             });
 
         let full_output = self.egui_ctx.end_pass();
@@ -907,69 +1227,68 @@ impl RenderContext {
             .egui_ctx
             .tessellate(full_output.shapes, full_output.pixels_per_point);
 
-        let output = match self.surface.get_current_texture() {
-            Ok(tex) => tex,
+        let surface_texture = match self.surface.get_current_texture() {
+            Ok(texture) => texture,
             Err(wgpu::SurfaceError::Outdated) => {
                 self.surface.configure(&self.device, &self.config);
                 self.surface.get_current_texture().unwrap()
             }
-            Err(e) => panic!("Surface error: {:?}", e),
+            Err(surface_error) => panic!("Surface error: {:?}", surface_error),
         };
-        let view = output
+        let surface_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        for (id, delta) in &full_output.textures_delta.set {
+        for (texture_id, delta) in &full_output.textures_delta.set {
             self.egui_renderer
-                .update_texture(&self.device, &self.queue, *id, delta);
+                .update_texture(&self.device, &self.queue, *texture_id, delta);
         }
 
-        // SPRINT 4: If heatmap is disabled, zero out stress values so colors
-        // revert to pure material colors. The CPU does this before mesh build.
-        let effective_voxels: Vec<(&Voxel, f32, bool)> = if self.show_stress_heatmap {
+        // Apply heatmap toggle: zero stress values if disabled.
+        let effective_voxels: Vec<(&Voxel, f32, bool, Option<usize>)> = if self.show_stress_heatmap
+        {
             voxels.to_vec()
         } else {
             voxels
                 .iter()
-                .map(|(v, _, scaffold)| (*v, 0.0, *scaffold))
+                .map(|(voxel, _, scaffold, segment)| (*voxel, 0.0, *scaffold, *segment))
                 .collect()
         };
 
-        let (v, s_idx, b_idx) =
+        let (vertex_data, solid_indices, border_indices) =
             build_mesh_with_stress(&effective_voxels, self.spawn_x, self.spawn_z);
 
-        let v_buf = self
+        let vertex_buf = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: bytemuck::cast_slice(&v),
+                contents: bytemuck::cast_slice(&vertex_data),
                 usage: wgpu::BufferUsages::VERTEX,
             });
-        let s_buf = self
+        let solid_index_buf = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: bytemuck::cast_slice(&s_idx),
+                contents: bytemuck::cast_slice(&solid_indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
-        let b_buf = self
+        let border_index_buf = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: bytemuck::cast_slice(&b_idx),
+                contents: bytemuck::cast_slice(&border_indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-        let mut encoder = self
+        let mut command_encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
-        // ── 3D world render pass ───────────────────────────────────────────────
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("3D Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: &surface_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -994,25 +1313,22 @@ impl RenderContext {
                 occlusion_query_set: None,
             });
 
-            pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            pass.set_vertex_buffer(0, v_buf.slice(..));
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, vertex_buf.slice(..));
 
-            if !s_idx.is_empty() {
-                pass.set_pipeline(&self.render_pipeline);
-                pass.set_index_buffer(s_buf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..s_idx.len() as u32, 0, 0..1);
+            if !solid_indices.is_empty() {
+                render_pass.set_pipeline(&self.render_pipeline);
+                render_pass.set_index_buffer(solid_index_buf.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..solid_indices.len() as u32, 0, 0..1);
             }
 
-            if !b_idx.is_empty() {
-                pass.set_pipeline(&self.border_pipeline);
-                pass.set_index_buffer(b_buf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..b_idx.len() as u32, 0, 0..1);
+            if !border_indices.is_empty() {
+                render_pass.set_pipeline(&self.border_pipeline);
+                render_pass.set_index_buffer(border_index_buf.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..border_indices.len() as u32, 0, 0..1);
             }
         }
 
-        // ── egui UI overlay pass ───────────────────────────────────────────────
-        // LEARNING: egui renders AFTER the 3D pass using LoadOp::Load (don't
-        // clear the existing 3D pixels). No depth buffer — UI is always on top.
         {
             let screen_descriptor = egui_wgpu::ScreenDescriptor {
                 size_in_pixels: [self.config.width, self.config.height],
@@ -1021,15 +1337,15 @@ impl RenderContext {
             self.egui_renderer.update_buffers(
                 &self.device,
                 &self.queue,
-                &mut encoder,
+                &mut command_encoder,
                 &paint_jobs,
                 &screen_descriptor,
             );
-            let mut ui_pass = encoder
+            let mut ui_pass = command_encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("egui Pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
+                        view: &surface_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -1047,13 +1363,13 @@ impl RenderContext {
             drop(ui_pass);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        self.queue.submit(std::iter::once(command_encoder.finish()));
+        surface_texture.present();
 
-        for id in &full_output.textures_delta.free {
-            self.egui_renderer.free_texture(id);
+        for texture_id in &full_output.textures_delta.free {
+            self.egui_renderer.free_texture(texture_id);
         }
 
-        commands
+        (block_commands, agent_commands)
     }
 }

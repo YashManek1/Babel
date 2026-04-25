@@ -96,6 +96,7 @@
 // =============================================================================
 
 use bevy_ecs::prelude::*;
+use glam::Vec3;
 use numpy::{PyArray1, PyArrayMethods, PyReadwriteArray1};
 use pyo3::prelude::*;
 use std::collections::HashSet;
@@ -108,6 +109,7 @@ use winit::{
     window::WindowId,
 };
 
+mod agent;
 mod physics;
 mod render;
 mod world;
@@ -123,6 +125,13 @@ mod bridge;
 #[cfg(test)]
 mod tests;
 
+use agent::{
+    BodySegment, HumanoidPosePreset, HumanoidRegistry, HumanoidRig, HumanoidSensors,
+    JOINT_OBSERVATION_STRIDE, SENSOR_OBSERVATION_STRIDE, SpawnHumanoidParams,
+    apply_joint_torques_system, apply_torque_to_joint, collect_humanoid_observation,
+    despawn_all_humanoids, move_humanoid, solve_joint_constraints_system, spawn_humanoid,
+    update_humanoid_rigs_system, update_humanoid_sensors_system,
+};
 use physics::mortar::{
     MortarBonds, break_overloaded_bonds_system, register_new_bonds_system,
     solve_mortar_constraints_system, try_register_bonds,
@@ -243,6 +252,74 @@ fn safe_spawn_height_for_grid(grid: &SpatialGrid, gx: i32, gz: i32) -> f32 {
 // packing lets a single Linear(n_blocks * 12, hidden_size) layer handle any world.
 // =============================================================================
 pub const OBSERVATION_STRIDE: usize = 12;
+
+/// Total humanoid observation size exposed to Python:
+/// 9 body segments × 15 floats each + 18 aggregate sensor floats.
+pub const HUMANOID_OBSERVATION_SIZE: usize =
+    BodySegment::COUNT * JOINT_OBSERVATION_STRIDE + SENSOR_OBSERVATION_STRIDE;
+
+fn latest_humanoid_agent_id(ecs_world: &World) -> Option<u32> {
+    let registry = ecs_world.get_resource::<HumanoidRegistry>()?;
+    registry.torso_entity_by_agent_id.keys().max().copied()
+}
+
+fn default_swing_axis_for_segment(segment: BodySegment) -> Vec3 {
+    match segment {
+        BodySegment::LeftThigh | BodySegment::RightThigh => Vec3::Z,
+        BodySegment::LeftUpperArm => -Vec3::X,
+        BodySegment::RightUpperArm => Vec3::X,
+        _ => Vec3::Y,
+    }
+}
+
+fn sync_renderer_agent_panel(renderer: &mut RenderContext, ecs_world: &World) {
+    let Some(agent_id) = latest_humanoid_agent_id(ecs_world) else {
+        renderer.agent_panel.display_agent_count = 0;
+        renderer.agent_panel.display_balance_error = 0.0;
+        renderer.agent_panel.display_com_height = 0.0;
+        renderer.agent_panel.display_left_foot_contact = false;
+        renderer.agent_panel.display_right_foot_contact = false;
+        renderer.agent_panel.joint_angles_degrees = [0.0; BodySegment::COUNT];
+        return;
+    };
+
+    let registry = ecs_world.get_resource::<HumanoidRegistry>().unwrap();
+    renderer.agent_panel.display_agent_count = registry.agent_count();
+
+    let Some(torso_entity) = registry.torso_entity(agent_id) else {
+        return;
+    };
+
+    if let Some(rig) = ecs_world.get::<HumanoidRig>(torso_entity) {
+        renderer.agent_panel.display_balance_error = rig.balance_error;
+        renderer.agent_panel.display_com_height = rig.center_of_mass.y;
+
+        for segment in [
+            BodySegment::LeftThigh,
+            BodySegment::LeftShin,
+            BodySegment::RightThigh,
+            BodySegment::RightShin,
+            BodySegment::LeftUpperArm,
+            BodySegment::LeftForearm,
+            BodySegment::RightUpperArm,
+            BodySegment::RightForearm,
+        ] {
+            if let Some(segment_entity) = rig.segment_entity(segment) {
+                if let Some(joint_constraint) =
+                    ecs_world.get::<agent::JointConstraint>(segment_entity)
+                {
+                    renderer.agent_panel.joint_angles_degrees[segment.index()] =
+                        joint_constraint.target_angle_radians.to_degrees();
+                }
+            }
+        }
+    }
+
+    if let Some(sensors) = ecs_world.get::<HumanoidSensors>(torso_entity) {
+        renderer.agent_panel.display_left_foot_contact = sensors.left_foot_contact;
+        renderer.agent_panel.display_right_foot_contact = sensors.right_foot_contact;
+    }
+}
 
 // =============================================================================
 // RenderEventPump: thin ApplicationHandler wrapper for winit's pump_events API
@@ -380,6 +457,7 @@ fn build_ecs_and_schedule() -> (World, Schedule) {
     ecs_world.insert_resource(MortarBonds::default()); // SPRINT 3: bond registry
     ecs_world.insert_resource(StressMap::default());
     ecs_world.insert_resource(ScaffoldTracker::default());
+    ecs_world.insert_resource(HumanoidRegistry::default());
 
     // =======================================================================
     // LEARNING: Bevy's System Scheduling and .chain()
@@ -412,12 +490,16 @@ fn build_ecs_and_schedule() -> (World, Schedule) {
             world::spatial_grid::update_spatial_grid_system,
             physics::xpbd::integrate_system,
             physics::xpbd::solve_constraints_system,
+            solve_joint_constraints_system,
+            apply_joint_torques_system,
             register_new_bonds_system,
             solve_mortar_constraints_system, // SPRINT 3
             break_overloaded_bonds_system,   // SPRINT 3
             physics::xpbd::update_velocities_system,
             world::spatial_grid::update_spatial_grid_system,
             compute_stress_system,
+            update_humanoid_rigs_system,
+            update_humanoid_sensors_system,
         )
             .chain(),
     );
@@ -716,6 +798,191 @@ impl BabelEngine {
     }
 
     // =========================================================================
+    // Sprint 5: Humanoid observation + control API
+    // =========================================================================
+    pub fn humanoid_observation_size(&self) -> usize {
+        HUMANOID_OBSERVATION_SIZE
+    }
+
+    pub fn humanoid_joint_count(&self) -> usize {
+        8
+    }
+
+    pub fn latest_humanoid_agent_id(&self) -> Option<u32> {
+        latest_humanoid_agent_id(&self.ecs_world)
+    }
+
+    pub fn spawn_humanoid_worker(&mut self, world_x: f32, world_z: f32) -> PyResult<u32> {
+        let agent_id = spawn_humanoid(
+            &mut self.ecs_world,
+            SpawnHumanoidParams::new(world_x, world_z),
+        );
+        Ok(agent_id)
+    }
+
+    pub fn despawn_all_humanoid_workers(&mut self) -> PyResult<usize> {
+        Ok(despawn_all_humanoids(&mut self.ecs_world))
+    }
+
+    pub fn set_humanoid_joint_target(
+        &mut self,
+        agent_id: u32,
+        joint_index: usize,
+        target_angle_radians: f32,
+    ) -> PyResult<bool> {
+        let joint_segment = match joint_index {
+            0 => BodySegment::LeftThigh,
+            1 => BodySegment::LeftShin,
+            2 => BodySegment::RightThigh,
+            3 => BodySegment::RightShin,
+            4 => BodySegment::LeftUpperArm,
+            5 => BodySegment::LeftForearm,
+            6 => BodySegment::RightUpperArm,
+            7 => BodySegment::RightForearm,
+            _ => return Ok(false),
+        };
+
+        Ok(apply_torque_to_joint(
+            &mut self.ecs_world,
+            agent_id,
+            joint_segment,
+            target_angle_radians,
+            default_swing_axis_for_segment(joint_segment),
+        ))
+    }
+
+    pub fn set_humanoid_joint_targets(
+        &mut self,
+        agent_id: u32,
+        joint_targets_radians: Vec<f32>,
+    ) -> PyResult<usize> {
+        let segment_order = [
+            BodySegment::LeftThigh,
+            BodySegment::LeftShin,
+            BodySegment::RightThigh,
+            BodySegment::RightShin,
+            BodySegment::LeftUpperArm,
+            BodySegment::LeftForearm,
+            BodySegment::RightUpperArm,
+            BodySegment::RightForearm,
+        ];
+
+        let mut applied_joint_count = 0usize;
+        for (joint_index, target_angle_radians) in joint_targets_radians.iter().enumerate() {
+            let Some(&segment) = segment_order.get(joint_index) else {
+                break;
+            };
+            if apply_torque_to_joint(
+                &mut self.ecs_world,
+                agent_id,
+                segment,
+                *target_angle_radians,
+                default_swing_axis_for_segment(segment),
+            ) {
+                applied_joint_count += 1;
+            }
+        }
+
+        Ok(applied_joint_count)
+    }
+
+    pub fn apply_humanoid_pose_preset(
+        &mut self,
+        agent_id: u32,
+        preset_name: String,
+    ) -> PyResult<usize> {
+        let preset = match preset_name.to_ascii_lowercase().as_str() {
+            "tstance" | "t_stance" | "tee_stance" | "t-stance" => HumanoidPosePreset::TeeStance,
+            "standing" => HumanoidPosePreset::Standing,
+            "walk" | "walkmidstride" | "walk_stride" | "walk-stride" => {
+                HumanoidPosePreset::WalkMidStride
+            }
+            "squat" | "deepsquat" | "deep_squat" | "deep-squat" => HumanoidPosePreset::Squat,
+            "armraise" | "arm_raise" | "arm-raise" => HumanoidPosePreset::ArmRaise,
+            _ => HumanoidPosePreset::Standing,
+        };
+
+        let mut applied_joint_count = 0usize;
+        for &(segment, target_angle_radians) in preset.joint_angles() {
+            if apply_torque_to_joint(
+                &mut self.ecs_world,
+                agent_id,
+                segment,
+                target_angle_radians,
+                default_swing_axis_for_segment(segment),
+            ) {
+                applied_joint_count += 1;
+            }
+        }
+
+        Ok(applied_joint_count)
+    }
+
+    pub fn move_humanoid_worker(
+        &mut self,
+        agent_id: u32,
+        direction_x: f32,
+        direction_z: f32,
+    ) -> PyResult<bool> {
+        Ok(move_humanoid(
+            &mut self.ecs_world,
+            agent_id,
+            Vec3::new(direction_x, 0.0, direction_z),
+        ))
+    }
+
+    pub fn get_humanoid_observation_into<'py>(
+        &mut self,
+        py: Python<'py>,
+        agent_id: u32,
+        obs: &Bound<'py, PyArray1<f32>>,
+    ) -> PyResult<usize> {
+        let mut readwrite_observation: PyReadwriteArray1<f32> = obs.readwrite();
+        let output_slice: &mut [f32] = readwrite_observation.as_slice_mut()?;
+
+        if output_slice.len() < HUMANOID_OBSERVATION_SIZE {
+            return Ok(0);
+        }
+
+        let segments_written = collect_humanoid_observation(
+            &self.ecs_world,
+            agent_id,
+            &mut output_slice[..BodySegment::COUNT * JOINT_OBSERVATION_STRIDE],
+        );
+        if segments_written == 0 {
+            return Ok(0);
+        }
+
+        let registry = self.ecs_world.get_resource::<HumanoidRegistry>().unwrap();
+        let Some(torso_entity) = registry.torso_entity(agent_id) else {
+            return Ok(0);
+        };
+        let Some(rig) = self.ecs_world.get::<HumanoidRig>(torso_entity) else {
+            return Ok(0);
+        };
+        let Some(sensors) = self.ecs_world.get::<HumanoidSensors>(torso_entity) else {
+            return Ok(0);
+        };
+        let torso_rotation = rig
+            .segment_entity(BodySegment::Torso)
+            .and_then(|entity| self.ecs_world.get::<Voxel>(entity))
+            .map(|torso_voxel| torso_voxel.rotation)
+            .unwrap_or_default();
+
+        sensors.pack_into_buffer(
+            rig.center_of_mass,
+            rig.center_of_mass_velocity,
+            rig.balance_error,
+            torso_rotation,
+            &mut output_slice[BodySegment::COUNT * JOINT_OBSERVATION_STRIDE
+                ..BodySegment::COUNT * JOINT_OBSERVATION_STRIDE + SENSOR_OBSERVATION_STRIDE],
+        );
+
+        let _ = py;
+        Ok(HUMANOID_OBSERVATION_SIZE)
+    }
+
+    // =========================================================================
     // SPRINT 4: get_stress_data() — Stress values for Python reward shaping
     // =========================================================================
     pub fn get_stress_data(&self) -> PyResult<(f32, f32, usize)> {
@@ -971,6 +1238,7 @@ impl BabelEngine {
     // clear_dynamic_blocks() — SPRINT 3: also clears all mortar bonds
     // =========================================================================
     pub fn clear_dynamic_blocks(&mut self) -> PyResult<usize> {
+        let humanoids_cleared = despawn_all_humanoids(&mut self.ecs_world);
         let mut query = self.ecs_world.query::<(Entity, &Voxel)>();
         let to_despawn: Vec<Entity> = query
             .iter(&self.ecs_world)
@@ -978,7 +1246,7 @@ impl BabelEngine {
             .map(|(e, _)| e)
             .collect();
 
-        let count = to_despawn.len();
+        let count = to_despawn.len() + humanoids_cleared;
 
         // SPRINT 3: Remove bonds before despawning entities
         // (prevents dangling entity references in MortarBonds)
@@ -1053,9 +1321,11 @@ impl BabelEngine {
         let now = Instant::now();
         let dt = self.last_frame.elapsed().as_secs_f32().min(0.1);
         self.last_frame = now;
-        let mut commands_to_execute = Vec::new();
+        let mut commands_to_execute: (Vec<UiCommand>, Vec<agent::UiAgentCommand>) =
+            (Vec::new(), Vec::new());
         if let Some(renderer) = &mut self.renderer {
             renderer.camera.update(dt);
+            sync_renderer_agent_panel(renderer, &self.ecs_world);
         }
         {
             // SPRINT 4: Pass StressMap to the renderer so blocks are colored
@@ -1069,12 +1339,19 @@ impl BabelEngine {
                     .collect()
             };
 
-            let mut query = self.ecs_world.query::<(Entity, &Voxel)>();
-            let voxels_with_stress: Vec<(&Voxel, f32, bool)> = query
+            let mut query = self
+                .ecs_world
+                .query::<(Entity, &Voxel, Option<&agent::JointBodyProperties>)>();
+            let voxels_with_stress: Vec<(&Voxel, f32, bool, Option<usize>)> = query
                 .iter(&self.ecs_world)
-                .map(|(entity, voxel)| {
+                .map(|(entity, voxel, joint_body_properties)| {
                     let stress = stress_by_entity.get(&entity).copied().unwrap_or(0.0);
-                    (voxel, stress, voxel.material.is_scaffold())
+                    (
+                        voxel,
+                        stress,
+                        voxel.material.is_scaffold(),
+                        joint_body_properties.map(|joint_body| joint_body.segment.index()),
+                    )
                 })
                 .collect();
 
@@ -1083,7 +1360,9 @@ impl BabelEngine {
             }
         }
 
-        for cmd in commands_to_execute {
+        let (block_commands_to_execute, agent_commands_to_execute) = commands_to_execute;
+
+        for cmd in block_commands_to_execute {
             if let UiCommand::DespawnAllScaffold = cmd {
                 let _ = self.despawn_scaffolding();
                 continue;
@@ -1165,6 +1444,63 @@ impl BabelEngine {
                     );
                 }
                 UiCommand::DespawnAllScaffold => unreachable!(),
+            }
+        }
+
+        let active_agent_id = latest_humanoid_agent_id(&self.ecs_world);
+        for agent_command in agent_commands_to_execute {
+            match agent_command {
+                agent::UiAgentCommand::SpawnHumanoid => {
+                    let spawn_x = self
+                        .renderer
+                        .as_ref()
+                        .map(|renderer| renderer.spawn_x)
+                        .unwrap_or(0.0);
+                    let spawn_z = self
+                        .renderer
+                        .as_ref()
+                        .map(|renderer| renderer.spawn_z)
+                        .unwrap_or(0.0);
+                    spawn_humanoid(
+                        &mut self.ecs_world,
+                        SpawnHumanoidParams::new(spawn_x, spawn_z),
+                    );
+                }
+                agent::UiAgentCommand::DespawnAllHumanoids => {
+                    let _ = despawn_all_humanoids(&mut self.ecs_world);
+                }
+                agent::UiAgentCommand::SetJointAngle {
+                    segment,
+                    target_angle_radians,
+                } => {
+                    if let Some(agent_id) = active_agent_id {
+                        let _ = apply_torque_to_joint(
+                            &mut self.ecs_world,
+                            agent_id,
+                            segment,
+                            target_angle_radians,
+                            default_swing_axis_for_segment(segment),
+                        );
+                    }
+                }
+                agent::UiAgentCommand::ApplyPosePreset { preset } => {
+                    if let Some(agent_id) = active_agent_id {
+                        for &(segment, target_angle_radians) in preset.joint_angles() {
+                            let _ = apply_torque_to_joint(
+                                &mut self.ecs_world,
+                                agent_id,
+                                segment,
+                                target_angle_radians,
+                                default_swing_axis_for_segment(segment),
+                            );
+                        }
+                    }
+                }
+                agent::UiAgentCommand::MoveActiveHumanoid { direction } => {
+                    if let Some(agent_id) = active_agent_id {
+                        let _ = move_humanoid(&mut self.ecs_world, agent_id, direction);
+                    }
+                }
             }
         }
     }

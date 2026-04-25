@@ -90,6 +90,7 @@
 //   more aggressively, reducing the residual that mortar tries to correct.
 // =============================================================================
 
+use crate::agent::JointBodyProperties;
 use crate::world::spatial_grid::SpatialGrid;
 use crate::world::voxel::{ShapeType, Voxel};
 use bevy_ecs::prelude::*;
@@ -310,6 +311,8 @@ pub struct BodySnapshot {
     pub inv_mass: f32,
     pub shape: ShapeType,
     pub sphere_radius: f32,
+    pub half_extents: Vec3,
+    pub humanoid_agent_id: Option<u32>,
 }
 
 // =============================================================================
@@ -642,14 +645,16 @@ fn compute_contact(
     self_pos: Vec3,
     self_shape: &ShapeType,
     self_radius: f32,
+    self_half_extents: Vec3,
     other_pos: Vec3,
     other_shape: &ShapeType,
     other_radius: f32,
+    other_half_extents: Vec3,
 ) -> Option<Contact> {
     match (self_shape, other_shape) {
         // ── Cube vs Cube: simple AABB ─────────────────────────────────────────
         (ShapeType::Cube, ShapeType::Cube) => {
-            compute_aabb_aabb_contact(self_pos, Vec3::splat(0.5), other_pos, Vec3::splat(0.5))
+            compute_aabb_aabb_contact(self_pos, self_half_extents, other_pos, other_half_extents)
         }
 
         // ── Cube falling onto Wedge: SAT with slope axis ──────────────────────
@@ -665,7 +670,7 @@ fn compute_contact(
 
         // ── Wedge vs Wedge: approximate as AABB (rare in practice) ───────────
         (ShapeType::Wedge, ShapeType::Wedge) => {
-            compute_aabb_aabb_contact(self_pos, Vec3::splat(0.5), other_pos, Vec3::splat(0.5))
+            compute_aabb_aabb_contact(self_pos, self_half_extents, other_pos, other_half_extents)
         }
 
         // ── Sphere vs Sphere ──────────────────────────────────────────────────
@@ -675,12 +680,12 @@ fn compute_contact(
 
         // ── Sphere vs Box (Cube or Wedge): sphere-AABB test ──────────────────
         (ShapeType::Sphere, ShapeType::Cube) | (ShapeType::Sphere, ShapeType::Wedge) => {
-            compute_sphere_aabb_contact(self_pos, self_radius, other_pos, Vec3::splat(0.5))
+            compute_sphere_aabb_contact(self_pos, self_radius, other_pos, other_half_extents)
         }
 
         // ── Box (Cube or Wedge) vs Sphere: same test, flipped normal ─────────
         (ShapeType::Cube, ShapeType::Sphere) | (ShapeType::Wedge, ShapeType::Sphere) => {
-            compute_sphere_aabb_contact(other_pos, other_radius, self_pos, Vec3::splat(0.5)).map(
+            compute_sphere_aabb_contact(other_pos, other_radius, self_pos, self_half_extents).map(
                 |mut c| {
                     c.normal = -c.normal;
                     c
@@ -754,12 +759,12 @@ pub fn integrate_system(mut query: Query<&mut Voxel>) {
 // SPRINT 4.5: The floor_contacts buffer now captures floor proximity (not just
 // penetration), enabling the sleep system to correctly detect floor-resting blocks.
 pub fn solve_constraints_system(
-    mut query: Query<(Entity, &mut Voxel)>,
+    mut query: Query<(Entity, &mut Voxel, Option<&JointBodyProperties>)>,
     grid: Res<SpatialGrid>,
     settings: Res<PhysicsSettings>,
     mut buffers: ResMut<SolverBuffers>,
 ) {
-    let dynamic_count = query.iter().filter(|(_, v)| v.inv_mass > 0.0).count();
+    let dynamic_count = query.iter().filter(|(_, v, _)| v.inv_mass > 0.0).count();
 
     // OPTIMIZATION: Scale solver iterations to block count.
     // More blocks → fewer iterations per step (trade accuracy for speed).
@@ -786,7 +791,7 @@ pub fn solve_constraints_system(
         buffers.processed_pairs.clear(); // SPRINT 4.5: restore required pair deduplication
 
         let mut idx = 0;
-        for (entity, _voxel) in query.iter() {
+        for (entity, _voxel, _joint_body) in query.iter() {
             buffers.entity_to_index.insert(entity, idx);
             buffers.snapshots.push(BodySnapshot {
                 predicted_position: Vec3::ZERO,
@@ -794,6 +799,8 @@ pub fn solve_constraints_system(
                 inv_mass: 0.0,
                 shape: ShapeType::Cube,
                 sphere_radius: 0.0,
+                half_extents: Vec3::splat(0.5),
+                humanoid_agent_id: None,
             });
             buffers.pos_corrections.push(Vec3::ZERO);
             buffers.normal_accum.push(Vec3::ZERO);
@@ -804,7 +811,7 @@ pub fn solve_constraints_system(
 
         // ── STEP A: Snapshot ─────────────────────────────────────────────────
         // Freeze all predicted positions for this iteration.
-        for (entity, voxel) in query.iter() {
+        for (entity, voxel, joint_body) in query.iter() {
             if let Some(&idx) = buffers.entity_to_index.get(&entity) {
                 buffers.snapshots[idx] = BodySnapshot {
                     predicted_position: voxel.predicted_position,
@@ -812,6 +819,8 @@ pub fn solve_constraints_system(
                     inv_mass: voxel.inv_mass,
                     shape: voxel.shape.clone(),
                     sphere_radius: voxel.sphere_radius,
+                    half_extents: voxel.half_extents,
+                    humanoid_agent_id: joint_body.map(|body| body.agent_id),
                 };
             }
         }
@@ -849,7 +858,7 @@ pub fn solve_constraints_system(
         }
 
         // ── STEP B: Process each entity's constraints ─────────────────────────
-        for (entity, voxel) in query.iter() {
+        for (entity, voxel, _joint_body) in query.iter() {
             if voxel.is_sleeping {
                 continue;
             }
@@ -879,19 +888,26 @@ pub fn solve_constraints_system(
             if let Some(floor_y) = settings.global_floor_y {
                 let mut min_local_y = 0.0_f32;
 
+                let box_half_extents = voxel.half_extents;
+                let box_corners = [
+                    Vec3::new(box_half_extents.x, box_half_extents.y, box_half_extents.z),
+                    Vec3::new(-box_half_extents.x, box_half_extents.y, box_half_extents.z),
+                    Vec3::new(box_half_extents.x, -box_half_extents.y, box_half_extents.z),
+                    Vec3::new(-box_half_extents.x, -box_half_extents.y, box_half_extents.z),
+                    Vec3::new(box_half_extents.x, box_half_extents.y, -box_half_extents.z),
+                    Vec3::new(-box_half_extents.x, box_half_extents.y, -box_half_extents.z),
+                    Vec3::new(box_half_extents.x, -box_half_extents.y, -box_half_extents.z),
+                    Vec3::new(
+                        -box_half_extents.x,
+                        -box_half_extents.y,
+                        -box_half_extents.z,
+                    ),
+                ];
+                let sphere_floor_point = [Vec3::new(0.0, -voxel.sphere_radius, 0.0)];
                 let extents: &[Vec3] = if voxel.shape == ShapeType::Sphere {
-                    &[Vec3::new(0.0, -voxel.sphere_radius, 0.0)]
+                    &sphere_floor_point
                 } else {
-                    &[
-                        Vec3::new(0.5, 0.5, 0.5),
-                        Vec3::new(-0.5, 0.5, 0.5),
-                        Vec3::new(0.5, -0.5, 0.5),
-                        Vec3::new(-0.5, -0.5, 0.5),
-                        Vec3::new(0.5, 0.5, -0.5),
-                        Vec3::new(-0.5, 0.5, -0.5),
-                        Vec3::new(0.5, -0.5, -0.5),
-                        Vec3::new(-0.5, -0.5, -0.5),
-                    ]
+                    &box_corners
                 };
 
                 for &local_corner in extents {
@@ -928,7 +944,7 @@ pub fn solve_constraints_system(
             grid.get_neighbors_into(voxel.predicted_position, &mut neighbors);
             for (other_e, _other_shape, grid_pos) in neighbors.iter().copied() {
                 // We MUST use processed_pairs for deduplication because spatial grid queries
-                // are asymmetric! (Entity queries using predicted_position, finding other_e at position. 
+                // are asymmetric! (Entity queries using predicted_position, finding other_e at position.
                 // other_e queries using predicted_position, likely missing Entity).
                 let pair = if entity.index() < other_e.index() {
                     (entity, other_e)
@@ -943,7 +959,15 @@ pub fn solve_constraints_system(
                     continue;
                 };
 
-                let (self_pos, self_prev_pos, self_inv_mass, self_shape, self_radius) = {
+                let (
+                    self_pos,
+                    self_prev_pos,
+                    self_inv_mass,
+                    self_shape,
+                    self_radius,
+                    self_half_extents,
+                    self_humanoid_agent_id,
+                ) = {
                     let s = &buffers.snapshots[self_idx];
                     (
                         s.predicted_position,
@@ -951,9 +975,19 @@ pub fn solve_constraints_system(
                         s.inv_mass,
                         s.shape.clone(),
                         s.sphere_radius,
+                        s.half_extents,
+                        s.humanoid_agent_id,
                     )
                 };
-                let (other_pos, other_prev_pos, other_inv_mass, other_shape, other_radius) = {
+                let (
+                    other_pos,
+                    other_prev_pos,
+                    other_inv_mass,
+                    other_shape,
+                    other_radius,
+                    other_half_extents,
+                    other_humanoid_agent_id,
+                ) = {
                     let s = &buffers.snapshots[other_idx];
                     (
                         s.predicted_position,
@@ -961,8 +995,16 @@ pub fn solve_constraints_system(
                         s.inv_mass,
                         s.shape.clone(),
                         s.sphere_radius,
+                        s.half_extents,
+                        s.humanoid_agent_id,
                     )
                 };
+
+                if self_humanoid_agent_id.is_some()
+                    && self_humanoid_agent_id == other_humanoid_agent_id
+                {
+                    continue;
+                }
 
                 // BUG FIX #1: Use actual snapshot position, not grid-rounded pos.
                 // grid_pos is broad-phase only — narrow-phase uses exact positions.
@@ -973,9 +1015,11 @@ pub fn solve_constraints_system(
                     self_pos,
                     &self_shape,
                     self_radius,
+                    self_half_extents,
                     other_pos,
                     &other_shape,
                     other_radius,
+                    other_half_extents,
                 ) else {
                     continue; // No overlap — nothing to resolve
                 };
@@ -1092,7 +1136,7 @@ pub fn solve_constraints_system(
         // flush the accumulated corrections into the live predicted_positions.
         for (entity, idx) in buffers.entity_to_index.iter() {
             let corr = buffers.pos_corrections[*idx];
-            if let Ok((_, mut v)) = query.get_mut(*entity) {
+            if let Ok((_, mut v, _)) = query.get_mut(*entity) {
                 // Apply position correction
                 v.predicted_position += corr;
 
